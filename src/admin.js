@@ -17,6 +17,7 @@
 const LINKS = [
   ["Panel", "https://panel.livenet.host"],
   ["Panel admin", "https://panel.livenet.host/admin"],
+  ["Authentik admin", "https://auth.livenet.host/if/admin/"],
   ["Cloudflare dashboard", "https://dash.cloudflare.com"],
   ["Website repo", "https://github.com/Livinglive234/livenet-web"],
   ["Twitch dashboard", "https://dashboard.twitch.tv"],
