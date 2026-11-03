@@ -57,7 +57,7 @@ const readCookie = (request, name) => {
 const setCookie = (name, value, maxAge) => `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`;
 
 // Only same-site paths, never another site (blocks open redirects).
-const safeNext = (value) => (typeof value === "string" && /^\/(?!\/)[^\\\r\n]*$/.test(value) ? value : "/");
+const safeNext = (value, fallback = "/") => (typeof value === "string" && /^\/(?!\/)[^\\\r\n]*$/.test(value) ? value : fallback);
 
 // ---- Session ---------------------------------------------------------------
 
@@ -133,7 +133,7 @@ export async function handleAuth(request, env) {
         scope: "openid profile email", state, nonce, code_challenge: challenge, code_challenge_method: "S256",
       }).toString();
 
-      const login = await sign(env, { typ: "login", state, nonce, verifier, host: url.hostname, next: safeNext(url.searchParams.get("next")), exp: now() + LOGIN_SECONDS });
+      const login = await sign(env, { typ: "login", state, nonce, verifier, host: url.hostname, next: safeNext(url.searchParams.get("next"), "/account"), exp: now() + LOGIN_SECONDS });
       return new Response(null, { status: 302, headers: { Location: authorize.toString(), "Set-Cookie": setCookie(LOGIN_COOKIE, login, LOGIN_SECONDS), "Cache-Control": "no-store" } });
     } catch {
       return messagePage("Sign-in is unavailable", "We couldn't reach the sign-in service. Please try again in a moment.", 502);
