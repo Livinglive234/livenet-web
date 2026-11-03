@@ -362,7 +362,8 @@ export async function handleAuth(request, env) {
         // null means Authentik did not say (scope not set up yet), which is not the same as "off".
         mfa: typeof profile.mfa_enabled === "boolean" ? profile.mfa_enabled : null,
         mfa_methods: [].concat(profile.mfa_methods ?? []).map(String).slice(0, 5),
-        iat: now(), chk: now(),
+        // iat is Authentik's own clock (same as its logout notices); chk is ours.
+        iat: Number.isFinite(claims.iat) ? Math.floor(claims.iat) : now(), chk: now(),
         exp: now() + SESSION_SECONDS,
       });
       const headers = new Headers({ Location: login.next, "Cache-Control": "no-store" });
