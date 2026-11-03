@@ -156,7 +156,7 @@ input, textarea, select {
   color: var(--text); font: inherit;
 }
 textarea { min-height: 7.5rem; resize: vertical; }
-.hp { position: absolute; left: -62.5rem; }
+.hp { position: absolute; left: -62.5rem; width: 0.0625rem; height: 0.0625rem; min-height: 0; padding: 0; border: 0; opacity: 0; overflow: hidden; pointer-events: none; }
 .status { padding: 0.75rem 0.875rem; border-radius: var(--r-control); display: none; }
 .status.ok { display: block; background: var(--ok-bg); border: 1px solid var(--brand-dim); }
 .status.err { display: block; background: var(--err-bg); border: 1px solid var(--err-border); }
