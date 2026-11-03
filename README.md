@@ -36,6 +36,12 @@ The panel at panel.livenet.host is separate and runs on its own server.
 - Each email can only be saved once.
 - Turnstile: the widget's site key is already in `public/beta/index.html`. Add the widget's **secret key** as a Worker secret named `TURNSTILE_SECRET`
   (Worker → Settings → Variables and Secrets, or `wrangler secret put TURNSTILE_SECRET`). Never put it in the repo.
-  Until the secret is set, every submission is rejected. The Worker only accepts tokens issued for the `beta-request` action on `livenet.host`, `livenet.beer` or their `www.` versions (list in `src/worker.js`),
+  Until the secret is set, every submission is rejected. The Worker only accepts tokens issued for the `beta-request` action on `livenet.host` or `livenet.beer` (list in `src/worker.js`),
   so the form can't be tested from localhost.
 - Rate limit: Security → WAF → Rate limiting rules → a rule for path `/api/beta`, for example 5 requests per minute per IP.
+
+## www redirects
+
+`www.livenet.host` and `www.livenet.beer` redirect to the plain domain with a Cloudflare Redirect Rule, so the Worker only serves the plain domains.
+For each domain: add a proxied `www` DNS record (for example an AAAA record for `www` with value `100::`), then
+Rules → Redirect Rules → use the "Redirect from WWW to Root" template → deploy.
