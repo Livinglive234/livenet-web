@@ -1,4 +1,5 @@
-// Cloudflare Pages Function: handles POST /api/beta.
+// Cloudflare Worker for livenet.host.
+// Handles POST /api/beta. Everything else is served from public/ by Cloudflare.
 // Saves each request in the BETA_REQUESTS KV namespace. Optionally also posts
 // to a Discord webhook if the DISCORD_WEBHOOK secret is set.
 
@@ -8,7 +9,7 @@ const json = (body, status = 200) =>
     headers: { "Content-Type": "application/json" },
   });
 
-export async function onRequestPost({ request, env }) {
+async function handleBeta(request, env) {
   let data;
   try {
     data = await request.json();
@@ -31,6 +32,10 @@ export async function onRequestPost({ request, env }) {
     return json({ error: "That email address doesn't look right." }, 400);
   }
 
+  if (!env.BETA_REQUESTS && !env.DISCORD_WEBHOOK) {
+    return json({ error: "Requests aren't set up yet. Please try again later." }, 503);
+  }
+
   const entry = { name, email, use, reason, submitted: new Date().toISOString() };
 
   if (env.BETA_REQUESTS) {
@@ -48,9 +53,18 @@ export async function onRequestPost({ request, env }) {
     });
   }
 
-  if (!env.BETA_REQUESTS && !env.DISCORD_WEBHOOK) {
-    return json({ error: "Requests aren't set up yet. Please try again later." }, 503);
-  }
-
   return json({ ok: true });
 }
+
+export default {
+  async fetch(request, env) {
+    const { pathname } = new URL(request.url);
+
+    if (pathname === "/api/beta") {
+      if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
+      return handleBeta(request, env);
+    }
+
+    return env.ASSETS.fetch(request);
+  },
+};
