@@ -18,6 +18,10 @@ const LOGIN_COOKIE = "ln_login";
 const ID_TOKEN_COOKIE = "ln_idt";
 const SESSION_SECONDS = 24 * 3600;
 const LOGIN_SECONDS = 600;
+// How long a session goes without asking Authentik whether the login is still active.
+const RECHECK_SECONDS = 300;
+const LOGOUT_PREFIX = "logout:";
+const BACKCHANNEL_EVENT = "http://schemas.openid.net/event/backchannel-logout";
 
 // "Open the panel" goes straight to the panel's Authentik sign-in. Authentik already knows
 // who you are, so this signs you in and lands you in the panel with no extra login screen.
@@ -84,7 +88,71 @@ const configured = (env) => missingSettings(env).length === 0;
 // The signed-in person, or null. Other files (comments, etc.) can import this.
 export async function getSession(request, env) {
   if (!configured(env)) return null;
-  return unsign(env, readCookie(request, SESSION_COOKIE), "session");
+  const session = await unsign(env, readCookie(request, SESSION_COOKIE), "session");
+  if (!session) return null;
+  // Authentik told us (back-channel logout) that this person signed out after this session began.
+  // If the check itself fails, keep the session rather than locking everyone out.
+  try {
+    const loggedOutAt = Number(await env.BETA_REQUESTS?.get(LOGOUT_PREFIX + session.sub));
+    if (loggedOutAt && !(session.iat >= loggedOutAt)) return null;
+  } catch {
+    // keep the session
+  }
+  return session;
+}
+
+// Pages that need a sign-in also ask Authentik, quietly, every few minutes whether the login is
+// still active. This catches a sign-out elsewhere even if Authentik's logout notice never arrived.
+const dueForRecheck = (session) => !(session.chk > now() - RECHECK_SECONDS);
+const recheckRedirect = (path) =>
+  new Response(null, { status: 302, headers: { Location: `/auth/login?silent=1&next=${encodeURIComponent(path)}`, "Cache-Control": "no-store" } });
+
+// ---- Back-channel logout ---------------------------------------------------
+
+let jwksCache = { at: 0, keys: [] };
+
+async function signingKeys(config, refresh) {
+  if (!refresh && Date.now() - jwksCache.at < 3600_000 && jwksCache.keys.length) return jwksCache.keys;
+  const response = await fetch(config.jwks_uri);
+  if (!response.ok) throw new Error("Could not fetch Authentik's signing keys.");
+  jwksCache = { at: Date.now(), keys: (await response.json()).keys ?? [] };
+  return jwksCache.keys;
+}
+
+// Checks the signature and claims of a logout token from Authentik and returns { sub, iat }.
+async function verifyLogoutToken(env, config, token) {
+  const parts = String(token).split(".");
+  if (parts.length !== 3) throw new Error("not a JWT");
+  const decode = (part) => JSON.parse(new TextDecoder().decode(fromB64u(part)));
+  const header = decode(parts[0]);
+  const data = encoder.encode(`${parts[0]}.${parts[1]}`);
+  const signature = fromB64u(parts[2]);
+
+  let valid = false;
+  if (header.alg === "RS256") {
+    const find = (keys) => keys.find((k) => k.kty === "RSA" && (header.kid ? k.kid === header.kid : k.use !== "enc"));
+    let jwk = find(await signingKeys(config, false)) ?? find(await signingKeys(config, true));
+    if (!jwk) throw new Error("no matching signing key");
+    const key = await crypto.subtle.importKey("jwk", jwk, { name: "RSASSA-PKCS1-v1_5", hash: "SHA-256" }, false, ["verify"]);
+    valid = await crypto.subtle.verify("RSASSA-PKCS1-v1_5", key, signature, data);
+  } else if (header.alg === "HS256") {
+    // Authentik signs with the client secret when the provider has no signing key.
+    const key = await crypto.subtle.importKey("raw", encoder.encode(env.OIDC_CLIENT_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["verify"]);
+    valid = await crypto.subtle.verify("HMAC", key, signature, data);
+  } else {
+    throw new Error("unsupported signing algorithm");
+  }
+  if (!valid) throw new Error("bad signature");
+
+  const claims = decode(parts[1]);
+  if (claims.iss !== config.issuer) throw new Error("wrong issuer");
+  if (![].concat(claims.aud).includes(env.OIDC_CLIENT_ID)) throw new Error("wrong audience");
+  if (!claims.events || !(BACKCHANNEL_EVENT in claims.events)) throw new Error("not a logout event");
+  if ("nonce" in claims) throw new Error("logout tokens must not have a nonce");
+  if (!claims.sub || typeof claims.sub !== "string") throw new Error("no subject");
+  if (!(claims.iat > now() - 86400 && claims.iat < now() + 600)) throw new Error("token is too old or from the future");
+  if (claims.exp && !(claims.exp > now())) throw new Error("token expired");
+  return { sub: claims.sub, iat: Math.floor(claims.iat) };
 }
 
 // ---- OpenID Connect --------------------------------------------------------
@@ -200,8 +268,26 @@ export async function handleAuth(request, env) {
 
   const redirectUri = `https://${url.hostname}/auth/callback`;
 
+  if (url.pathname === "/auth/backchannel-logout" && request.method === "POST") {
+    try {
+      const form = await request.formData();
+      const config = await discovery(env);
+      const { sub, iat } = await verifyLogoutToken(env, config, form.get("logout_token"));
+      const key = LOGOUT_PREFIX + sub;
+      const existing = Number(await env.BETA_REQUESTS.get(key)) || 0;
+      // The token's own time (not when it arrived), so signing straight back in isn't undone by a late notice.
+      if (iat > existing) await env.BETA_REQUESTS.put(key, String(iat), { expirationTtl: SESSION_SECONDS + 3600 });
+      return new Response(null, { status: 200, headers: { "Cache-Control": "no-store" } });
+    } catch (error) {
+      return new Response(JSON.stringify({ error: "invalid_request", error_description: error.message }), {
+        status: 400, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+      });
+    }
+  }
+
   if (url.pathname === "/auth/login" && request.method === "GET") {
     try {
+      const silent = url.searchParams.get("silent") === "1";
       const config = await discovery(env);
       const state = randomToken();
       const nonce = randomToken();
@@ -212,9 +298,10 @@ export async function handleAuth(request, env) {
       authorize.search = new URLSearchParams({
         response_type: "code", client_id: env.OIDC_CLIENT_ID, redirect_uri: redirectUri,
         scope: scopes(env), state, nonce, code_challenge: challenge, code_challenge_method: "S256",
+        ...(silent ? { prompt: "none" } : {}),
       }).toString();
 
-      const login = await sign(env, { typ: "login", state, nonce, verifier, host: url.hostname, next: safeNext(url.searchParams.get("next")), exp: now() + LOGIN_SECONDS });
+      const login = await sign(env, { typ: "login", state, nonce, verifier, host: url.hostname, silent, next: safeNext(url.searchParams.get("next")), exp: now() + LOGIN_SECONDS });
       return new Response(null, { status: 302, headers: { Location: authorize.toString(), "Set-Cookie": setCookie(LOGIN_COOKIE, login, LOGIN_SECONDS), "Cache-Control": "no-store" } });
     } catch {
       return messagePage("Sign-in is unavailable", "We couldn't reach the sign-in service. Please try again in a moment.", 502);
@@ -228,6 +315,14 @@ export async function handleAuth(request, env) {
       return messagePage("Sign-in expired", "Your sign-in took too long or didn't start here. Please try again.", 400);
     }
     const code = url.searchParams.get("code");
+    if (login.silent && (url.searchParams.get("error") || !code)) {
+      // The quiet check says the Authentik login has ended: end this session too and ask to sign in.
+      const headers = new Headers({ Location: `/auth/login?next=${encodeURIComponent(login.next)}`, "Cache-Control": "no-store" });
+      headers.append("Set-Cookie", setCookie(SESSION_COOKIE, "", 0));
+      headers.append("Set-Cookie", setCookie(ID_TOKEN_COOKIE, "", 0));
+      headers.append("Set-Cookie", setCookie(LOGIN_COOKIE, "", 0));
+      return new Response(null, { status: 302, headers });
+    }
     if (url.searchParams.get("error") || !code) return messagePage("Sign-in was cancelled", "No changes were made.", 400);
 
     try {
@@ -267,6 +362,7 @@ export async function handleAuth(request, env) {
         // null means Authentik did not say (scope not set up yet), which is not the same as "off".
         mfa: typeof profile.mfa_enabled === "boolean" ? profile.mfa_enabled : null,
         mfa_methods: [].concat(profile.mfa_methods ?? []).map(String).slice(0, 5),
+        iat: now(), chk: now(),
         exp: now() + SESSION_SECONDS,
       });
       const headers = new Headers({ Location: login.next, "Cache-Control": "no-store" });
@@ -320,18 +416,21 @@ export async function handleAuth(request, env) {
   if ((url.pathname === "/beta" || url.pathname === "/beta/") && request.method === "GET") {
     const session = await getSession(request, env);
     if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/beta/", "Cache-Control": "no-store" } });
+    if (dueForRecheck(session)) return recheckRedirect("/beta/");
     return betaPage(session);
   }
 
   if (url.pathname === "/account/2fa" && request.method === "GET") {
     const session = await getSession(request, env);
     if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account/2fa", "Cache-Control": "no-store" } });
+    if (dueForRecheck(session)) return recheckRedirect("/account/2fa");
     return twoFactorPage(session);
   }
 
   if (url.pathname === "/account" && request.method === "GET") {
     const session = await getSession(request, env);
     if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account", "Cache-Control": "no-store" } });
+    if (dueForRecheck(session)) return recheckRedirect("/account");
     return accountPage(session);
   }
 

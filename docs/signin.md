@@ -26,6 +26,15 @@ Signing out on the site also ends the Authentik login (single sign-out). For tha
 
 Without the redirect URIs, signing out still works and ends on Authentik's page. If a URI is wrong, Authentik shows an error page after ending the login.
 
+### Signing out elsewhere signs you out of the site
+
+Two things keep the site's own session (a 24 hour cookie) in step with Authentik:
+
+1. **Back-channel logout (instant).** When an Authentik login ends (from the site, the panel or Authentik itself), Authentik sends a signed notice to the site. The site records it and rejects any session that began before it. On the provider, set **Logout URI** to `https://livenet.host/auth/backchannel-logout` and **Logout Method** to **Back-channel**. One URI covers livenet.beer too, since both share the same Worker.
+2. **Quiet re-check (backup).** If a notice is missed (site down, network error), the `/account`, `/account/2fa` and `/beta/` pages ask Authentik in the background every 5 minutes (`prompt=none`) whether the login is still active, and sign you out here if it isn't. This also refreshes the 2FA status.
+
+Notices are per person, not per device: ending one Authentik login signs that person out of the site everywhere.
+
 ### Showing 2FA status on the site (optional)
 
 The 2FA page and the account page can show whether someone has two-factor turned on. Authentik tells the site through a small scope mapping. Until this is set up, the pages show "status unknown" and nothing breaks.
