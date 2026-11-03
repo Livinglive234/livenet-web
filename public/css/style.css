@@ -73,7 +73,7 @@ a { color: var(--brand); text-decoration: none; }
 a:hover { text-decoration: underline; }
 :is(a, button, input, select, textarea):focus-visible { outline: 0.125rem solid var(--brand); outline-offset: 0.1875rem; }
 
-.wrap { margin: 0 auto; padding: 0 1rem; }
+.wrap { margin: 0 auto; padding-left: 6%; padding-right: 6%; }
 
 /* Header */
 .site-header {
@@ -84,13 +84,13 @@ a:hover { text-decoration: underline; }
 }
 .site-header .wrap {
   display: flex; align-items: center; justify-content: space-between;
-  flex-wrap: wrap; gap: 0.5rem 1rem; padding-top: 0.75rem; padding-bottom: 0.75rem;
+  flex-wrap: wrap; gap: 0.25rem 1rem; padding-top: 0.5rem; padding-bottom: 0.5rem;
 }
-.logo { font-weight: 800; font-size: 1.25rem; color: var(--text); letter-spacing: -0.02em; }
+.logo { font-weight: 800; font-size: 1.125rem; color: var(--text); letter-spacing: -0.02em; }
 .logo span { color: var(--brand); }
 .logo:hover { text-decoration: none; }
 nav { display: flex; align-items: center; gap: 0.5rem 1.25rem; flex-wrap: wrap; }
-nav a { color: var(--muted); font-size: 0.9375rem; }
+nav a { color: var(--muted); font-size: 0.875rem; }
 nav a:hover, nav a[aria-current="page"] { color: var(--text); text-decoration: none; }
 
 /* Buttons */
@@ -105,10 +105,11 @@ nav a:hover, nav a[aria-current="page"] { color: var(--text); text-decoration: n
 .btn-ghost { border-color: var(--border); color: var(--text); background: transparent; }
 .btn-ghost:hover { border-color: var(--accent); }
 .mt { margin-top: 1.5rem; }
+.site-header .btn { min-height: 2.25rem; padding: 0.25rem 0.875rem; font-size: 0.875rem; }
 .btn-row { display: flex; gap: 0.75rem; flex-wrap: wrap; }
 
 /* Hero */
-.hero { padding: 4rem 1rem 3rem; text-align: center; }
+.hero { padding: 4rem 6% 3rem; text-align: center; }
 .hero h1 { font-size: 2.5rem; line-height: 1.1; margin: 0 0 1rem; letter-spacing: -0.03em; text-wrap: balance; }
 .hero h1 em {
   font-style: normal;
@@ -167,7 +168,7 @@ textarea { min-height: 7.5rem; resize: vertical; }
 .site-footer a { color: var(--muted); }
 .site-footer a:hover { color: var(--brand); }
 
-.page-title { padding: 3rem 1rem 0.5rem; }
+.page-title { padding: 3rem 6% 0.5rem; }
 .page-title h1 { font-size: 2.5rem; line-height: 1.1; margin: 0 0 0.5rem; letter-spacing: -0.03em; }
 
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
