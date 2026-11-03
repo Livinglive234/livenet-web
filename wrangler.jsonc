@@ -20,9 +20,9 @@
   // The slug at the end must match the provider's application slug in Authentik.
   "vars": {
     "OIDC_ISSUER": "https://auth.livenet.host/application/o/livenet-site/",
-    // Set to the Authentik scope name (for example "livenet_mfa") once the scope mapping exists.
-    // See docs/signin.md. Empty means the site does not ask for 2FA status.
-    "OIDC_MFA_SCOPE": ""
+    // The Authentik scope that reports 2FA status (see docs/signin.md). Empty means the site does
+    // not ask for it. If it is set but the scope is missing in Authentik, signing in may fail.
+    "OIDC_MFA_SCOPE": "livenet_mfa"
   },
 
   // Beta requests. The id is an identifier, not a secret: using the namespace needs
