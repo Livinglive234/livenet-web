@@ -61,7 +61,15 @@ const safeNext = (value) => (typeof value === "string" && /^\/(?!\/)[^\\\r\n]*$/
 
 // ---- Session ---------------------------------------------------------------
 
-const configured = (env) => Boolean(env.OIDC_ISSUER && env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET && String(env.SESSION_SECRET ?? "").length >= 32);
+// Names of settings that are missing or too short (names only, never values).
+const missingSettings = (env) => [
+  ["OIDC_ISSUER", Boolean(env.OIDC_ISSUER)],
+  ["OIDC_CLIENT_ID", Boolean(env.OIDC_CLIENT_ID)],
+  ["OIDC_CLIENT_SECRET", Boolean(env.OIDC_CLIENT_SECRET)],
+  ["SESSION_SECRET (32+ characters)", String(env.SESSION_SECRET ?? "").length >= 32],
+].filter(([, ok]) => !ok).map(([name]) => name);
+
+const configured = (env) => missingSettings(env).length === 0;
 
 // The signed-in person, or null. Other files (comments, etc.) can import this.
 export async function getSession(request, env) {
@@ -107,7 +115,7 @@ function accountPage(session) {
 export async function handleAuth(request, env) {
   const url = new URL(request.url);
   if (!HOSTS.includes(url.hostname)) return new Response("Not found.", { status: 404 });
-  if (!configured(env)) return messagePage("Sign-in isn't set up yet", "Please try again later.", 503);
+  if (!configured(env)) return messagePage("Sign-in isn't set up yet", `Missing settings: ${missingSettings(env).join(", ")}.`, 503);
 
   const redirectUri = `https://${url.hostname}/auth/callback`;
 
