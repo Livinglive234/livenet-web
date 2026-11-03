@@ -1,10 +1,6 @@
-// Sends the beta request form to /api/beta (see functions/api/beta.js).
+// Sends the beta request form to /api/beta (see src/worker.js).
 const form = document.getElementById("beta-form");
 const status = document.getElementById("status");
-
-// Until a real Turnstile site key is put in beta/index.html, hide the widget.
-const widget = form.querySelector(".cf-turnstile");
-if (widget && widget.dataset.sitekey.startsWith("REPLACE_")) widget.remove();
 
 function show(kind, message) {
   status.className = "status " + kind;
@@ -31,11 +27,12 @@ form.addEventListener("submit", async (event) => {
     if (!response.ok) throw new Error(result.error || "Something went wrong.");
 
     form.reset();
-    if (window.turnstile && widget) window.turnstile.reset();
     show("ok", "Thanks! Your request was sent. I'll email you if you're approved.");
   } catch (error) {
     show("err", error.message);
   } finally {
+    // Turnstile tokens work once, so get a fresh one before any retry.
+    if (window.turnstile) window.turnstile.reset();
     button.disabled = false;
   }
 });

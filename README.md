@@ -34,8 +34,8 @@ The panel at panel.livenet.host is separate and runs on its own server.
 ## Protecting the beta form
 
 - Each email can only be saved once.
-- Turnstile: in the Cloudflare dashboard go to Turnstile and add a widget for `livenet.host`.
-  Put the **site key** in `public/beta/index.html` (replace `REPLACE_WITH_TURNSTILE_SITE_KEY`),
-  and add the **secret key** as a Worker secret named `TURNSTILE_SECRET`.
-  Until both are set, the form works without the check.
+- Turnstile: the widget's site key is already in `public/beta/index.html`. Add the widget's **secret key** as a Worker secret named `TURNSTILE_SECRET`
+  (Worker → Settings → Variables and Secrets, or `wrangler secret put TURNSTILE_SECRET`). Never put it in the repo.
+  Until the secret is set, every submission is rejected. The Worker only accepts tokens issued for the `beta-request` action on `livenet.host` or `www.livenet.host`,
+  so the form can't be tested from localhost.
 - Rate limit: Security → WAF → Rate limiting rules → a rule for path `/api/beta`, for example 5 requests per minute per IP.

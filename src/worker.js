@@ -1,14 +1,42 @@
 // Cloudflare Worker for livenet.host.
 // Handles POST /api/beta. Everything else is served from public/ by Cloudflare.
 // Saves each request in the BETA_REQUESTS KV namespace, one per email. Optionally also posts
-// to a Discord webhook if the DISCORD_WEBHOOK secret is set. If TURNSTILE_SECRET
-// is set, each request must pass a Cloudflare Turnstile check.
+// to a Discord webhook if the DISCORD_WEBHOOK secret is set. Every request must
+// pass a Cloudflare Turnstile check (needs the TURNSTILE_SECRET secret).
 
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
     headers: { "Content-Type": "application/json" },
   });
+
+// Hostnames Turnstile may report for tokens issued on our pages. Never add localhost here.
+const TURNSTILE_HOSTNAMES = ["livenet.host", "www.livenet.host"];
+const TURNSTILE_ACTION = "beta-request";
+
+async function passesTurnstile(data, request, env) {
+  const token = data["cf-turnstile-response"];
+  if (!env.TURNSTILE_SECRET || typeof token !== "string" || !token || token.length > 2048) return false;
+
+  try {
+    const response = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body: new URLSearchParams({
+        secret: env.TURNSTILE_SECRET,
+        response: token,
+        remoteip: request.headers.get("CF-Connecting-IP") ?? "",
+      }),
+    });
+    const result = await response.json();
+    return (
+      result.success === true &&
+      result.action === TURNSTILE_ACTION &&
+      TURNSTILE_HOSTNAMES.includes(result.hostname)
+    );
+  } catch {
+    return false;
+  }
+}
 
 async function handleBeta(request, env) {
   let data;
@@ -20,6 +48,11 @@ async function handleBeta(request, env) {
 
   // Honeypot: bots fill this in. Pretend it worked.
   if (data.website) return json({ ok: true });
+
+  // Turnstile gate. Runs before anything else and fails closed.
+  if (!(await passesTurnstile(data, request, env))) {
+    return json({ error: "Verification failed. Please reload the page and try again." }, 400);
+  }
 
   const name = String(data.name ?? "").trim().slice(0, 100);
   const email = String(data.email ?? "").trim().slice(0, 200);
@@ -35,22 +68,6 @@ async function handleBeta(request, env) {
 
   if (!env.BETA_REQUESTS && !env.DISCORD_WEBHOOK) {
     return json({ error: "Requests aren't set up yet. Please try again later." }, 503);
-  }
-
-  // Turnstile check. Skipped until the TURNSTILE_SECRET secret is set.
-  if (env.TURNSTILE_SECRET) {
-    const token = String(data["cf-turnstile-response"] ?? "");
-    const result = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
-      method: "POST",
-      body: new URLSearchParams({
-        secret: env.TURNSTILE_SECRET,
-        response: token,
-        remoteip: request.headers.get("CF-Connecting-IP") ?? "",
-      }),
-    }).then((r) => r.json()).catch(() => ({}));
-    if (!result.success) {
-      return json({ error: "Verification failed. Please reload the page and try again." }, 400);
-    }
   }
 
   const entry = { name, email, use, reason, submitted: new Date().toISOString() };
