@@ -18,7 +18,12 @@
 
   // Sign in with LiveNet (Authentik). The client ID, client secret and SESSION_SECRET are Worker secrets.
   // The slug at the end must match the provider's application slug in Authentik.
-  "vars": { "OIDC_ISSUER": "https://auth.livenet.host/application/o/livenet-site/" },
+  "vars": {
+    "OIDC_ISSUER": "https://auth.livenet.host/application/o/livenet-site/",
+    // Set to the Authentik scope name (for example "livenet_mfa") once the scope mapping exists.
+    // See docs/signin.md. Empty means the site does not ask for 2FA status.
+    "OIDC_MFA_SCOPE": ""
+  },
 
   // Beta requests. The id is an identifier, not a secret: using the namespace needs
   // your Cloudflare login or this Worker's binding.

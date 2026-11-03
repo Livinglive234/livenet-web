@@ -100,6 +100,16 @@ async function discovery(env) {
   return config;
 }
 
+// The extra scope that makes Authentik report 2FA status (see docs/signin.md). Off unless
+// OIDC_MFA_SCOPE is set, so signing in keeps working until Authentik has the scope.
+const scopes = (env) => {
+  const extra = String(env.OIDC_MFA_SCOPE ?? "").trim();
+  return /^[A-Za-z0-9_.:-]+$/.test(extra) ? `openid profile email ${extra}` : "openid profile email";
+};
+
+// What each kind of Authentik 2FA device is called on screen.
+const MFA_NAMES = { TOTPDevice: "Authenticator app", StaticDevice: "Backup codes", WebAuthnDevice: "Security key or passkey" };
+
 // ---- Pages -----------------------------------------------------------------
 
 const html = (body, status = 200, extra = {}) =>
@@ -113,6 +123,7 @@ function accountPage(session) {
 <section><div class="wrap"><div class="grid">
 <div class="card"><span class="tag">Name</span><h3>${esc(session.name || session.username)}</h3><p>${esc(session.email)}</p></div>
 <div class="card"><span class="tag">Username</span><h3>${esc(session.username)}</h3><p>Use this to sign in everywhere on LiveNet.</p></div>
+<div class="card"><span class="tag">Security</span><h3>${esc(mfaHeadline(session))}</h3><p><a href="/account/2fa">Two-factor authentication</a></p></div>
 </div>
 <p class="mt btn-row"><a class="btn btn-primary" href="${PANEL_SIGN_IN}">Open the panel</a>
 <a class="btn btn-ghost" href="/account/2fa">Two-factor authentication</a>
@@ -121,13 +132,26 @@ function accountPage(session) {
   return html(shell({ title: "Your account — LiveNet", body }));
 }
 
-function twoFactorPage() {
+function mfaHeadline(session) {
+  if (session.mfa === true) return "Two-factor is on";
+  if (session.mfa === false) return "Two-factor is off";
+  return "Two-factor status unknown";
+}
+
+function twoFactorPage(session) {
+  const methods = (session.mfa_methods ?? []).map((m) => MFA_NAMES[m] ?? "Another method");
+  const status =
+    session.mfa === true
+      ? `<div class="card"><span class="tag">On</span><h3>Two-factor authentication is on</h3><p>${methods.length ? esc(methods.join(", ")) : "Set up on your LiveNet account."}</p></div>`
+      : session.mfa === false
+        ? `<div class="card"><span class="tag">Off</span><h3>Two-factor authentication is off</h3><p>Set up an authenticator app below to protect your account.</p></div>`
+        : "";
   const body = `<div class="wrap page-title"><h1>Two-factor authentication</h1><p class="lead">A second step when you sign in, using a code from an app on your phone. It protects your LiveNet account everywhere: this site and the panel.</p></div>
-<section><div class="wrap"><div class="grid">
+<section><div class="wrap">${status ? `<div class="grid">${status}</div><p class="mt"></p>` : ""}<div class="grid">
 <div class="card"><span class="tag">Recommended</span><h3>Authenticator app</h3><p>Use an app such as Google Authenticator, Authy or your password manager to make 6-digit codes.</p><p class="mt"><a class="btn btn-primary" href="${MFA_AUTHENTICATOR_SETUP}">Set up an authenticator app</a></p></div>
 <div class="card"><span class="tag">Backup</span><h3>Backup codes</h3><p>One-time codes for if you lose your phone. Save them somewhere safe.</p><p class="mt"><a class="btn btn-ghost" href="${MFA_BACKUP_CODES_SETUP}">Get backup codes</a></p></div>
 </div>
-<p class="mt"><a href="/account">← Back to your account</a></p></div></section>`;
+<p class="mt">Just finished setting something up? <a href="/auth/login?next=/account/2fa">Refresh this page's status</a>. <a href="/account">← Back to your account</a></p></div></section>`;
   return html(shell({ title: "Two-factor authentication — LiveNet", body }));
 }
 
@@ -151,7 +175,7 @@ export async function handleAuth(request, env) {
       const authorize = new URL(config.authorization_endpoint);
       authorize.search = new URLSearchParams({
         response_type: "code", client_id: env.OIDC_CLIENT_ID, redirect_uri: redirectUri,
-        scope: "openid profile email", state, nonce, code_challenge: challenge, code_challenge_method: "S256",
+        scope: scopes(env), state, nonce, code_challenge: challenge, code_challenge_method: "S256",
       }).toString();
 
       const login = await sign(env, { typ: "login", state, nonce, verifier, host: url.hostname, next: safeNext(url.searchParams.get("next")), exp: now() + LOGIN_SECONDS });
@@ -203,7 +227,11 @@ export async function handleAuth(request, env) {
       const session = await sign(env, {
         typ: "session", sub: profile.sub, username: String(profile.preferred_username ?? "").slice(0, 100),
         name: String(profile.name ?? "").slice(0, 100), email: String(profile.email ?? "").slice(0, 200),
-        groups: [].concat(profile.groups ?? []).map(String).slice(0, 20), exp: now() + SESSION_SECONDS,
+        groups: [].concat(profile.groups ?? []).map(String).slice(0, 20),
+        // null means Authentik did not say (scope not set up yet), which is not the same as "off".
+        mfa: typeof profile.mfa_enabled === "boolean" ? profile.mfa_enabled : null,
+        mfa_methods: [].concat(profile.mfa_methods ?? []).map(String).slice(0, 5),
+        exp: now() + SESSION_SECONDS,
       });
       const headers = new Headers({ Location: login.next, "Cache-Control": "no-store" });
       headers.append("Set-Cookie", setCookie(SESSION_COOKIE, session, SESSION_SECONDS));
@@ -256,7 +284,7 @@ export async function handleAuth(request, env) {
   if (url.pathname === "/account/2fa" && request.method === "GET") {
     const session = await getSession(request, env);
     if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account/2fa", "Cache-Control": "no-store" } });
-    return twoFactorPage();
+    return twoFactorPage(session);
   }
 
   if (url.pathname === "/account" && request.method === "GET") {

@@ -26,6 +26,28 @@ Signing out on the site also ends the Authentik login (single sign-out). For tha
 
 Without the redirect URIs, signing out still works and ends on Authentik's page. If a URI is wrong, Authentik shows an error page after ending the login.
 
+### Showing 2FA status on the site (optional)
+
+The 2FA page and the account page can show whether someone has two-factor turned on. Authentik tells the site through a small scope mapping. Until this is set up, the pages show "status unknown" and nothing breaks.
+
+1. In Authentik: Customization → Property Mappings → Create → **OAuth2 Scope Mapping**.
+   - Name: `LiveNet 2FA status`. Scope name: `livenet_mfa`.
+   - Expression:
+
+     ```python
+     from authentik.stages.authenticator import devices_for_user
+
+     devices = list(devices_for_user(request.user))
+     return {
+         "mfa_enabled": bool(devices),
+         "mfa_methods": sorted({type(d).__name__ for d in devices}),
+     }
+     ```
+2. Edit the website provider and add this mapping to its **Scopes**.
+3. Set `OIDC_MFA_SCOPE` to `"livenet_mfa"` in `wrangler.jsonc` and push.
+
+The status is read when someone signs in, so it can be out of date until their next sign-in. The 2FA page has a "Refresh this page's status" link, which signs in again silently and re-reads it.
+
 ## 2. Add Worker secrets (Cloudflare dashboard, never the repo)
 
 - `OIDC_CLIENT_ID` = the client ID
