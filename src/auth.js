@@ -146,12 +146,12 @@ function twoFactorPage(session) {
       : session.mfa === false
         ? `<div class="card"><span class="tag">Off</span><h3>Two-factor authentication is off</h3><p>Set up an authenticator app below to protect your account.</p></div>`
         : "";
-  const body = `<div class="wrap page-title"><h1>Two-factor authentication</h1><p class="lead">A second step when you sign in, using a code from an app on your phone. It protects your LiveNet account everywhere: this site and the panel.</p></div>
+  const body = `<div class="wrap page-title"><p><a class="btn btn-ghost" href="/account">← Back to your account</a></p><h1>Two-factor authentication</h1><p class="lead">A second step when you sign in, using a code from an app on your phone. It protects your LiveNet account everywhere: this site and the panel.</p></div>
 <section><div class="wrap">${status ? `<div class="grid">${status}</div><p class="mt"></p>` : ""}<div class="grid">
 <div class="card"><span class="tag">Recommended</span><h3>Authenticator app</h3><p>Use an app such as Google Authenticator, Authy or your password manager to make 6-digit codes.</p><p class="mt"><a class="btn btn-primary" href="${MFA_AUTHENTICATOR_SETUP}">Set up an authenticator app</a></p></div>
 <div class="card"><span class="tag">Backup</span><h3>Backup codes</h3><p>One-time codes for if you lose your phone. Save them somewhere safe.</p><p class="mt"><a class="btn btn-ghost" href="${MFA_BACKUP_CODES_SETUP}">Get backup codes</a></p></div>
 </div>
-<p class="mt">Just finished setting something up? <a href="/auth/login?next=/account/2fa">Refresh this page's status</a>. <a href="/account">← Back to your account</a></p></div></section>`;
+<p class="mt">Just finished setting something up? <a href="/auth/login?next=/account/2fa">Refresh this page's status</a>.</p></div></section>`;
   return html(shell({ title: "Two-factor authentication — LiveNet", body }));
 }
 
