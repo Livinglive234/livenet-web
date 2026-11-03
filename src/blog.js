@@ -88,7 +88,7 @@ export function shell({ title, description = "", body, current = "" }) {
       <a class="logo" href="/">Live<span>Net</span></a>
       <nav>
         ${nav}
-        <a href="/auth/login" data-signin>Sign in</a>
+        <a href="/auth/login?next=/account" data-signin>Sign in</a>
         <a class="btn btn-primary" href="/beta/">Request beta access</a>
       </nav>
     </div>

@@ -12,7 +12,7 @@ Routes: `/auth/login`, `/auth/callback`, `/auth/logout` (POST), `/auth/me`, `/ac
    - `https://livenet.host/auth/callback`
    - `https://livenet.beer/auth/callback`
 5. Scopes: `openid`, `email`, `profile`. Signing key: the self-signed certificate.
-6. In the application's settings, set **Launch URL** to `https://livenet.host/`.
+6. In the application's settings, set **Launch URL** to `https://livenet.host/auth/login?next=/account`. This is where people land after verifying a new account's email.
 7. Copy the **Client ID** and **Client Secret**.
 
 ## 2. Add Worker secrets (Cloudflare dashboard, never the repo)
@@ -29,6 +29,6 @@ Set the brand's **Default application** to this app, so people who verify their 
 
 ## Notes
 
-- Signing in from the header returns you to the page you were on. With no destination, you land on the home page. The account page is at `/account` (the header shows "Account" once you're signed in).
+- Signing in from the header always lands on `/account` (the header link carries `?next=/account`). With no destination at all, you land on the home page. Once signed in, the header shows "Account".
 - The session is a signed cookie that lasts 24 hours. Changing `SESSION_SECRET` signs everyone out.
 - `getSession(request, env)` in `src/auth.js` returns the signed-in person (or null) for other features such as comments.
