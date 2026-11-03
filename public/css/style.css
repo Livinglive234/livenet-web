@@ -47,11 +47,12 @@
   }
 }
 
-/* FRS: five lock points (Mobile 375, Tablet 768, Desktop 1280, Full HD 1920, XL 2560). */
+/* FRS: six lock points (Mobile 375, Tablet 768, Desktop 1280, Wide 1600, Full HD 1920, XL 2560). */
 :root { --frs-lock: 375; --frs-base: 17; --tier-cols: 1; }
 @media (min-width: 48em)  { :root { --frs-lock: 768;  --frs-base: 19.5; --tier-cols: 2; } }
 @media (min-width: 80em)  { :root { --frs-lock: 1280; --frs-base: 21.5; --tier-cols: 3; } }
-@media (min-width: 120em) { /* FRS extra lock: 1920 px, Desktop scales to 32px root at 1920x1080 which is too big, Kai/Claude 2026-11-02 */ :root { --frs-lock: 1920; --frs-base: 22; --tier-cols: 4; } }
+@media (min-width: 100em) { /* FRS extra lock: 1600 px, Desktop scaled up to a 26px root before this, too big on wide laptops, Kai/Claude 2026-11-02 */ :root { --frs-lock: 1600; --frs-base: 18; --tier-cols: 3; } }
+@media (min-width: 120em) { /* FRS extra lock: 1920 px, Desktop scales to 32px root at 1920x1080 which is too big, Kai/Claude 2026-11-02 */ :root { --frs-lock: 1920; --frs-base: 19; --tier-cols: 4; } }
 @media (min-width: 160em) { :root { --frs-lock: 2560; --frs-base: 22.5; --tier-cols: 4; } }
 html {
   font-size: calc(100vw / var(--frs-lock) * var(--frs-base));
