@@ -1,7 +1,7 @@
 # Admin dashboard (`/admin`)
 
 A private page on both `livenet.host/admin` and `livenet.beer/admin`. The code is `src/admin.js`.
-It shows beta requests (approve / reject), site traffic, panel numbers, and a links list.
+It shows beta requests (approve / reject), a blog editor, site traffic, panel numbers, and a links list.
 
 Until you finish step 1, `/admin` refuses everyone. Each section says what it still needs.
 
@@ -43,3 +43,11 @@ Reads Cloudflare's own zone analytics, so no tracking script is added to the sit
 ## Editing the links
 
 The list is at the top of `src/admin.js`.
+
+## Blog
+
+Public pages are `/blog` and `/blog/<address>` (code: `src/blog.js`). Posts are stored in the same KV namespace as beta requests, under keys starting with `post:`.
+
+- Write, edit, publish (or keep as a draft) and delete posts from the **Blog** section of the dashboard.
+- Posts use a small safe subset of Markdown: `# headings`, `**bold**`, `*italic*`, `[links](https://example.com)`, `- lists`, `> quotes`, `` `code` `` and fenced code blocks. HTML is not allowed.
+- A newly published post can take up to a minute to appear, because pages are cached for 60 seconds.

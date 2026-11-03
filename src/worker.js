@@ -1,4 +1,5 @@
 import { handleAdmin } from "./admin.js";
+import { handleBlog } from "./blog.js";
 
 // Cloudflare Worker for livenet.host.
 // Handles POST /api/beta. Everything else is served from public/ by Cloudflare.
@@ -105,6 +106,8 @@ export default {
     }
 
     if (pathname === "/admin" || pathname.startsWith("/admin/")) return handleAdmin(request, env);
+
+    if (pathname === "/blog" || pathname.startsWith("/blog/")) return handleBlog(request, env);
 
     return env.ASSETS.fetch(request);
   },

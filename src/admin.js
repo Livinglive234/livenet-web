@@ -25,10 +25,9 @@ const LINKS = [
   ["livenet.beer", "https://livenet.beer"],
 ];
 
-const STATUSES = ["pending", "approved", "rejected"];
+import { POST_PREFIX, esc, getPost, listPosts, slugify, validSlug } from "./blog.js";
 
-const esc = (value) =>
-  String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
+const STATUSES = ["pending", "approved", "rejected"];
 
 // ---- Access token check ----------------------------------------------------
 
@@ -160,6 +159,35 @@ async function panelSection(env) {
   }
 }
 
+async function blogSection(env) {
+  if (!env.BETA_REQUESTS) return `<h2 id="blog">Blog</h2>${note("Not connected yet. Bind the BETA_REQUESTS KV namespace to write posts here.")}`;
+  const posts = await listPosts(env);
+  const rows = posts.map((p) => `<tr><td>${esc(String(p.created).slice(0, 10))}</td><td><a href="/admin/blog/edit?slug=${encodeURIComponent(p.slug)}">${esc(p.title)}</a></td><td><span class="pill ${p.published ? "approved" : "pending"}">${p.published ? "published" : "draft"}</span></td><td>${p.published ? `<a href="/blog/${esc(p.slug)}">view</a>` : ""}</td></tr>`).join("");
+  const table = posts.length ? `<div class="scroll"><table><thead><tr><th>Date</th><th>Title</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : note("No posts yet.");
+  return `<h2 id="blog">Blog</h2><p><a class="btn btn-primary small" href="/admin/blog/new">New post</a></p>${table}`;
+}
+
+function editorPage(email, post, error = "") {
+  const p = { title: "", slug: "", summary: "", body: "", published: false, ...post };
+  const existing = Boolean(post?.original ?? post?.created);
+  const original = post?.original ?? post?.slug ?? "";
+  const remove = existing && original
+    ? `<form method="post" action="/admin/blog/delete" class="inline"><input type="hidden" name="slug" value="${esc(original)}"><button class="btn btn-ghost" type="submit">Delete post</button></form>`
+    : "";
+  return page(email, `<section><h1>${existing ? "Edit post" : "New post"}</h1>${error ? `<div class="status err">${esc(error)}</div>` : ""}
+<form method="post" action="/admin/blog" class="editor">
+<input type="hidden" name="original" value="${esc(original)}">
+<label>Title<input name="title" required maxlength="120" value="${esc(p.title)}"></label>
+<label>Address <small>Lowercase letters, numbers and dashes. Leave blank to make one from the title.</small><input name="slug" maxlength="80" pattern="[a-z0-9]+(-[a-z0-9]+)*" value="${esc(p.slug)}"></label>
+<label>Summary <small>Shown on the blog list and in search results.</small><input name="summary" maxlength="200" value="${esc(p.summary)}"></label>
+<label>Post <small>Markdown: # headings, **bold**, *italic*, [links](https://example.com), - lists, &gt; quotes, \`code\`. HTML is not allowed.</small><textarea name="body" required maxlength="50000">${esc(p.body)}</textarea></label>
+<label class="check"><input type="checkbox" name="published"${p.published ? " checked" : ""}> Published (uncheck to keep as a draft)</label>
+<div class="btn-row"><button class="btn btn-primary" type="submit">Save post</button><a class="btn btn-ghost" href="/admin#blog">Cancel</a></div>
+</form>${remove}</section>`);
+}
+
+const clip = (value, limit) => String(value ?? "").trim().slice(0, limit);
+
 // ---- Page and routes -------------------------------------------------------
 
 const headers = (type) => ({
@@ -182,27 +210,73 @@ export async function handleAdmin(request, env) {
   if (!email) return new Response("Forbidden.", { status: 403, headers: headers("text/plain") });
 
   const url = new URL(request.url);
+  const path = url.pathname.replace(/\/+$/, "") || "/";
+  const redirect = (to) => new Response(null, { status: 303, headers: { Location: to, "Cache-Control": "no-store" } });
+  const html = (body, status = 200) => new Response(body, { status, headers: headers("text/html; charset=utf-8") });
 
-  if (url.pathname === "/admin/requests" && request.method === "POST") {
+  if (request.method === "POST") {
     // Cookies authenticate this page, so only accept form posts from our own pages.
     const origin = request.headers.get("Origin");
     if (!origin || new URL(origin).host !== url.host) return new Response("Forbidden.", { status: 403, headers: headers("text/plain") });
-
     const form = await request.formData();
-    const address = String(form.get("email") ?? "").toLowerCase();
-    const status = String(form.get("status") ?? "");
-    if (env.BETA_REQUESTS && address && STATUSES.includes(status)) {
-      const key = `email:${address}`;
-      const entry = await env.BETA_REQUESTS.get(key, "json");
-      if (entry) await env.BETA_REQUESTS.put(key, JSON.stringify({ ...entry, status, reviewedBy: email, reviewed: new Date().toISOString() }));
+
+    if (path === "/admin/requests") {
+      const address = String(form.get("email") ?? "").toLowerCase();
+      const status = String(form.get("status") ?? "");
+      if (env.BETA_REQUESTS && address && STATUSES.includes(status)) {
+        const key = `email:${address}`;
+        const entry = await env.BETA_REQUESTS.get(key, "json");
+        if (entry) await env.BETA_REQUESTS.put(key, JSON.stringify({ ...entry, status, reviewedBy: email, reviewed: new Date().toISOString() }));
+      }
+      return redirect("/admin#requests");
     }
-    return new Response(null, { status: 303, headers: { Location: "/admin#requests", "Cache-Control": "no-store" } });
+
+    if (path === "/admin/blog" && env.BETA_REQUESTS) {
+      const original = clip(form.get("original"), 80);
+      const draft = {
+        title: clip(form.get("title"), 120),
+        summary: clip(form.get("summary"), 200),
+        body: clip(form.get("body"), 50000),
+        published: form.get("published") === "on",
+        slug: clip(form.get("slug"), 80).toLowerCase(),
+        original,
+      };
+      draft.slug = draft.slug || slugify(draft.title);
+      const fail = (message) => html(editorPage(email, draft, message), 400);
+
+      if (!draft.title || !draft.body) return fail("A title and some text are required.");
+      if (!validSlug(draft.slug)) return fail("The address can only use lowercase letters, numbers and dashes.");
+      if (draft.slug !== original && (await getPost(env, draft.slug))) return fail("A post with that address already exists.");
+
+      const previous = original ? await getPost(env, original) : null;
+      const now = new Date().toISOString();
+      const { original: _ignored, ...post } = draft;
+      await env.BETA_REQUESTS.put(POST_PREFIX + post.slug, JSON.stringify({ ...post, created: previous?.created ?? now, updated: now, author: previous?.author ?? email }));
+      if (original && original !== post.slug) await env.BETA_REQUESTS.delete(POST_PREFIX + original);
+      return redirect("/admin#blog");
+    }
+
+    if (path === "/admin/blog/delete" && env.BETA_REQUESTS) {
+      const slug = clip(form.get("slug"), 80);
+      if (validSlug(slug)) await env.BETA_REQUESTS.delete(POST_PREFIX + slug);
+      return redirect("/admin#blog");
+    }
+
+    return new Response("Not found.", { status: 404, headers: headers("text/plain") });
   }
 
-  if ((url.pathname === "/admin" || url.pathname === "/admin/") && request.method === "GET") {
-    const sections = await Promise.all([requestsSection(env), trafficSection(env), panelSection(env)]);
-    const body = [`<section><h1>Dashboard</h1></section>`, ...sections.map((s) => `<section>${s}</section>`), `<section>${linksSection()}</section>`].join("");
-    return new Response(page(email, body), { headers: headers("text/html; charset=utf-8") });
+  if (request.method === "GET") {
+    if (path === "/admin") {
+      const sections = await Promise.all([requestsSection(env), blogSection(env), trafficSection(env), panelSection(env)]);
+      const body = [`<section><h1>Dashboard</h1></section>`, ...sections.map((s) => `<section>${s}</section>`), `<section>${linksSection()}</section>`].join("");
+      return html(page(email, body));
+    }
+    if (path === "/admin/blog/new") return html(editorPage(email, null));
+    if (path === "/admin/blog/edit") {
+      const slug = clip(url.searchParams.get("slug"), 80);
+      const post = validSlug(slug) ? await getPost(env, slug) : null;
+      return post ? html(editorPage(email, post)) : redirect("/admin#blog");
+    }
   }
 
   return new Response("Not found.", { status: 404, headers: headers("text/plain") });
