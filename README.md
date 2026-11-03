@@ -11,6 +11,7 @@ Plain HTML, CSS and a little JavaScript. No build step.
   - `css/style.css`: all styling. The brand colors are `--brand` and `--accent` at the top.
   - `js/beta.js`: sends the beta form
 - `src/worker.js`: the server code that receives the form (Cloudflare Worker)
+- `src/admin.js`: the private `/admin` dashboard (setup in `docs/admin.md`)
 - `wrangler.jsonc`: Cloudflare settings
 
 ## Preview locally

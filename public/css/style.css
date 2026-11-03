@@ -171,4 +171,18 @@ textarea { min-height: 7.5rem; resize: vertical; }
 .page-title { padding: 3rem 6% 0.5rem; }
 .page-title h1 { font-size: 2.5rem; line-height: 1.1; margin: 0 0 0.5rem; letter-spacing: -0.03em; }
 
+/* Admin tables and status labels */
+table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+th, td { text-align: left; vertical-align: top; padding: 0.5rem 0.625rem; border-bottom: 1px solid var(--border); }
+th { color: var(--muted); font-weight: 600; }
+.scroll { overflow-x: auto; max-width: 100%; margin-top: 1rem; }
+.reason { max-width: 30ch; white-space: pre-wrap; overflow-wrap: anywhere; }
+.pill { display: inline-block; padding: 0.125rem 0.625rem; border-radius: var(--r-pill); border: 1px solid var(--border); font-size: 0.8125rem; }
+.pill.approved { color: var(--brand); border-color: var(--brand); }
+.pill.rejected { color: #d66; border-color: #d66; }
+.actions { white-space: nowrap; }
+form.inline { display: inline; max-width: none; }
+.btn.small { min-height: 2rem; padding: 0.125rem 0.625rem; font-size: 0.8125rem; }
+.site-header nav span { color: var(--muted); font-size: 0.8125rem; }
+
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }

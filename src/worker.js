@@ -1,3 +1,5 @@
+import { handleAdmin } from "./admin.js";
+
 // Cloudflare Worker for livenet.host.
 // Handles POST /api/beta. Everything else is served from public/ by Cloudflare.
 // Saves each request in the BETA_REQUESTS KV namespace, one per email. Optionally also posts
@@ -70,7 +72,7 @@ async function handleBeta(request, env) {
     return json({ error: "Requests aren't set up yet. Please try again later." }, 503);
   }
 
-  const entry = { name, email, use, reason, submitted: new Date().toISOString() };
+  const entry = { name, email, use, reason, status: "pending", submitted: new Date().toISOString() };
 
   // One request per email. A repeat looks like success but is not saved again.
   if (env.BETA_REQUESTS) {
@@ -101,6 +103,8 @@ export default {
       if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
       return handleBeta(request, env);
     }
+
+    if (pathname === "/admin" || pathname.startsWith("/admin/")) return handleAdmin(request, env);
 
     return env.ASSETS.fetch(request);
   },
