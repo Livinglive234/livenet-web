@@ -1,11 +1,17 @@
-// Shows "Account" in the header when you're signed in. Pages work the same without it.
+// Header sign-in link. Signed out: remembers this page so you come back to it after signing in.
+// Signed in: shows "Account". Pages work the same without this script.
+const links = document.querySelectorAll("[data-signin]");
+
 fetch("/auth/me", { credentials: "same-origin" })
   .then((response) => (response.ok ? response.json() : null))
   .then((me) => {
-    if (!me) return;
-    document.querySelectorAll("[data-signin]").forEach((link) => {
-      link.href = "/account";
-      link.textContent = "Account";
+    links.forEach((link) => {
+      if (me) {
+        link.href = "/account";
+        link.textContent = "Account";
+      } else {
+        link.href = "/auth/login?next=" + encodeURIComponent(location.pathname + location.search);
+      }
     });
   })
   .catch(() => {});
