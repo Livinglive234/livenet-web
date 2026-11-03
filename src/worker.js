@@ -11,7 +11,7 @@ const json = (body, status = 200) =>
   });
 
 // Hostnames Turnstile may report for tokens issued on our pages. Never add localhost here.
-const TURNSTILE_HOSTNAMES = ["livenet.host", "www.livenet.host"];
+const TURNSTILE_HOSTNAMES = ["livenet.host", "www.livenet.host", "livenet.beer", "www.livenet.beer"];
 const TURNSTILE_ACTION = "beta-request";
 
 async function passesTurnstile(data, request, env) {
