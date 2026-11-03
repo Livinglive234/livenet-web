@@ -52,6 +52,7 @@
           </label>
           <!-- Honeypot: real people leave this empty -->
           <input class="hp" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <div class="cf-turnstile" data-sitekey="REPLACE_WITH_TURNSTILE_SITE_KEY"></div>
           <div id="status" class="status" role="status"></div>
           <div><button class="btn btn-primary" type="submit">Send request</button></div>
         </form>
@@ -70,6 +71,7 @@
     </div>
   </footer>
 
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
   <script src="/js/beta.js"></script>
 </body>
 </html>

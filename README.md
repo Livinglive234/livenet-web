@@ -30,3 +30,12 @@ npx wrangler dev
 Every push to `main` deploys automatically. The default `workers.dev` address is turned off.
 
 The panel at panel.livenet.host is separate and runs on its own server.
+
+## Protecting the beta form
+
+- Each email can only be saved once.
+- Turnstile: in the Cloudflare dashboard go to Turnstile and add a widget for `livenet.host`.
+  Put the **site key** in `public/beta/index.html` (replace `REPLACE_WITH_TURNSTILE_SITE_KEY`),
+  and add the **secret key** as a Worker secret named `TURNSTILE_SECRET`.
+  Until both are set, the form works without the check.
+- Rate limit: Security → WAF → Rate limiting rules → a rule for path `/api/beta`, for example 5 requests per minute per IP.

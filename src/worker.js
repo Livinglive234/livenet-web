@@ -1,7 +1,8 @@
 // Cloudflare Worker for livenet.host.
 // Handles POST /api/beta. Everything else is served from public/ by Cloudflare.
-// Saves each request in the BETA_REQUESTS KV namespace. Optionally also posts
-// to a Discord webhook if the DISCORD_WEBHOOK secret is set.
+// Saves each request in the BETA_REQUESTS KV namespace, one per email. Optionally also posts
+// to a Discord webhook if the DISCORD_WEBHOOK secret is set. If TURNSTILE_SECRET
+// is set, each request must pass a Cloudflare Turnstile check.
 
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), {
@@ -36,10 +37,29 @@ async function handleBeta(request, env) {
     return json({ error: "Requests aren't set up yet. Please try again later." }, 503);
   }
 
+  // Turnstile check. Skipped until the TURNSTILE_SECRET secret is set.
+  if (env.TURNSTILE_SECRET) {
+    const token = String(data["cf-turnstile-response"] ?? "");
+    const result = await fetch("https://challenges.cloudflare.com/turnstile/v0/siteverify", {
+      method: "POST",
+      body: new URLSearchParams({
+        secret: env.TURNSTILE_SECRET,
+        response: token,
+        remoteip: request.headers.get("CF-Connecting-IP") ?? "",
+      }),
+    }).then((r) => r.json()).catch(() => ({}));
+    if (!result.success) {
+      return json({ error: "Verification failed. Please reload the page and try again." }, 400);
+    }
+  }
+
   const entry = { name, email, use, reason, submitted: new Date().toISOString() };
 
+  // One request per email. A repeat looks like success but is not saved again.
   if (env.BETA_REQUESTS) {
-    await env.BETA_REQUESTS.put(`${entry.submitted}-${crypto.randomUUID()}`, JSON.stringify(entry));
+    const key = `email:${email.toLowerCase()}`;
+    if (await env.BETA_REQUESTS.get(key)) return json({ ok: true });
+    await env.BETA_REQUESTS.put(key, JSON.stringify(entry));
   }
 
   if (env.DISCORD_WEBHOOK) {
