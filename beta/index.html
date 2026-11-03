@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Request beta access — LiveNet</title>
+  <meta name="description" content="Request access to the LiveNet invite-only beta.">
+  <link rel="icon" href="https://panel.livenet.host/livinglive234.ico">
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="logo" href="/">Live<span>Net</span></a>
+      <nav>
+        <a href="/minecraft/">Minecraft</a>
+        <a href="/hosting/">Hosting</a>
+        <a href="/projects/">Projects</a>
+        <a href="https://panel.livenet.host/login">Sign in</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <div class="wrap page-title">
+      <h1>Request beta access</h1>
+      <p class="lead">LiveNet is invite-only right now. Tell me a bit about yourself and I'll review your request.</p>
+    </div>
+
+    <section>
+      <div class="wrap">
+        <form id="beta-form" novalidate>
+          <label>Name
+            <input name="name" type="text" required maxlength="100" autocomplete="name">
+          </label>
+          <label>Email
+            <input name="email" type="email" required maxlength="200" autocomplete="email">
+          </label>
+          <label>Intended use
+            <select name="use" required>
+              <option value="">Choose one…</option>
+              <option>Minecraft network (playing)</option>
+              <option>Game server hosting</option>
+              <option>Both</option>
+              <option>Other</option>
+            </select>
+          </label>
+          <label>Background or reason for request
+            <small>Your experience, what you'd run or play, or why you want in.</small>
+            <textarea name="reason" required maxlength="2000"></textarea>
+          </label>
+          <!-- Honeypot: real people leave this empty -->
+          <input class="hp" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">
+          <div id="status" class="status" role="status"></div>
+          <div><button class="btn btn-primary" type="submit">Send request</button></div>
+        </form>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>© 2026 LiveNet.</span>
+      <div class="links">
+        <a href="https://twitch.tv/Livinglive234" rel="noopener">Twitch</a>
+        <a href="https://github.com/Livinglive234" rel="noopener">GitHub</a>
+        <a href="https://youtube.com/@Livinglive234" rel="noopener">YouTube</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="/js/beta.js"></script>
+</body>
+</html>
