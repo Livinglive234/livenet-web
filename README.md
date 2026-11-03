@@ -3,6 +3,7 @@
 Website for LiveNet (Livinglive234): the Minecraft network and LiveNet Server Hosting.
 
 Plain HTML, CSS and a little JavaScript. No build step.
+Page scaling uses FRS (Fluid Responsive Scaling) by Sheldon Schwartz, [mobileobjective.net](https://mobileobjective.net).
 
 ## Files
 

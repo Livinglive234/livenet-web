@@ -1,5 +1,7 @@
 # FRS (Fluid Responsive Scaling) on this site
 
+FRS was created by Sheldon Schwartz. See [mobileobjective.net](https://mobileobjective.net).
+
 `public/css/style.css` uses FRS, six locks (the four standard ones plus extra 1600 and 1920 locks). One rule on the root font size scales the whole page,
 and everything else is measured in `rem`:
 
