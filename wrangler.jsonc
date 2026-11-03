@@ -14,8 +14,9 @@
     "binding": "ASSETS",
     // Only /api/* and /admin run the Worker. Everything else is served straight from public/.
     "run_worker_first": ["/api/*", "/admin", "/admin/*"]
-  }
+  },
 
-  // After creating the KV namespace for beta requests, add:
-  // "kv_namespaces": [{ "binding": "BETA_REQUESTS", "id": "<namespace id>" }]
+  // Beta requests. The id is an identifier, not a secret: using the namespace needs
+  // your Cloudflare login or this Worker's binding.
+  "kv_namespaces": [{ "binding": "BETA_REQUESTS", "id": "904f65854b2e426e92d411aecaef0720" }]
 }
