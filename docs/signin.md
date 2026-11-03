@@ -15,6 +15,17 @@ Routes: `/auth/login`, `/auth/callback`, `/auth/logout` (POST), `/auth/me`, `/ac
 6. In the application's settings, set **Launch URL** to `https://livenet.host/auth/login?next=/account`. This is where people land after verifying a new account's email.
 7. Copy the **Client ID** and **Client Secret**.
 
+### Signing out of Authentik too
+
+Signing out on the site also ends the Authentik login (single sign-out). For that to work properly, on the provider:
+
+- **Invalidation flow:** set it to `default-invalidation-flow`. The default (`default-provider-invalidation-flow`) has no logout step, so it would only sign you out of the app, not out of Authentik.
+- **Post-logout redirect URIs** (strict), so Authentik sends people back to the site afterward:
+  - `https://livenet.host/`
+  - `https://livenet.beer/`
+
+Without the redirect URIs, signing out still works and ends on Authentik's page. If a URI is wrong, Authentik shows an error page after ending the login.
+
 ## 2. Add Worker secrets (Cloudflare dashboard, never the repo)
 
 - `OIDC_CLIENT_ID` = the client ID

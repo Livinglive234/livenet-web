@@ -15,6 +15,7 @@ import { esc, shell } from "./blog.js";
 const HOSTS = ["livenet.host", "livenet.beer"];
 const SESSION_COOKIE = "ln_session";
 const LOGIN_COOKIE = "ln_login";
+const ID_TOKEN_COOKIE = "ln_idt";
 const SESSION_SECONDS = 24 * 3600;
 const LOGIN_SECONDS = 600;
 
@@ -190,6 +191,8 @@ export async function handleAuth(request, env) {
       });
       const headers = new Headers({ Location: login.next, "Cache-Control": "no-store" });
       headers.append("Set-Cookie", setCookie(SESSION_COOKIE, session, SESSION_SECONDS));
+      // Kept so a later sign-out can tell Authentik which login to end (an OIDC "id_token_hint").
+      headers.append("Set-Cookie", setCookie(ID_TOKEN_COOKIE, String(tokens.id_token), SESSION_SECONDS));
       headers.append("Set-Cookie", setCookie(LOGIN_COOKIE, "", 0));
       return new Response(null, { status: 302, headers });
     } catch (error) {
@@ -201,7 +204,30 @@ export async function handleAuth(request, env) {
     // Only accept a sign-out from our own pages.
     const origin = request.headers.get("Origin");
     if (!origin || new URL(origin).host !== url.host) return new Response("Forbidden.", { status: 403 });
-    return new Response(null, { status: 303, headers: { Location: "/", "Set-Cookie": setCookie(SESSION_COOKIE, "", 0), "Cache-Control": "no-store" } });
+
+    const headers = new Headers({ "Cache-Control": "no-store", Location: "/" });
+    headers.append("Set-Cookie", setCookie(SESSION_COOKIE, "", 0));
+    headers.append("Set-Cookie", setCookie(ID_TOKEN_COOKIE, "", 0));
+
+    // Also end the Authentik login, so signing out here signs you out everywhere.
+    // If Authentik can't be reached, the local sign-out above still happens.
+    try {
+      const config = await discovery(env);
+      if (config.end_session_endpoint) {
+        const logout = new URL(config.end_session_endpoint);
+        const idToken = readCookie(request, ID_TOKEN_COOKIE);
+        if (idToken) {
+          // Authentik only sends people back to the site when it has the ID token and a
+          // registered "post-logout redirect URI". Without them it just ends the login.
+          logout.searchParams.set("id_token_hint", idToken);
+          logout.searchParams.set("post_logout_redirect_uri", `https://${url.hostname}/`);
+        }
+        headers.set("Location", logout.toString());
+      }
+    } catch {
+      // keep the local sign-out
+    }
+    return new Response(null, { status: 303, headers });
   }
 
   if (url.pathname === "/auth/me" && request.method === "GET") {
