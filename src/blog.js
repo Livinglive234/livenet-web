@@ -88,7 +88,7 @@ export function shell({ title, description = "", body, current = "" }) {
       <a class="logo" href="/">Live<span>Net</span></a>
       <nav>
         ${nav}
-        <a href="https://panel.livenet.host/login">Sign in</a>
+        <a href="/auth/login" data-signin>Sign in</a>
         <a class="btn btn-primary" href="/beta/">Request beta access</a>
       </nav>
     </div>
@@ -104,6 +104,7 @@ export function shell({ title, description = "", body, current = "" }) {
       </div>
     </div>
   </footer>
+  <script src="/js/session.js" defer></script>
 </body>
 </html>`;
 }

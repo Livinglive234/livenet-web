@@ -1,0 +1,202 @@
+// Sign in with LiveNet: OpenID Connect against Authentik (auth.livenet.host).
+//
+// Routes: /auth/login, /auth/callback, /auth/logout (POST), /auth/me, /account.
+// Uses the authorization code flow with PKCE. The site never sees passwords. The
+// session is a signed cookie (HMAC), so there is nothing to store on the server.
+//
+// Settings:
+//   OIDC_ISSUER         the Authentik provider's issuer URL (a variable in wrangler.jsonc)
+//   OIDC_CLIENT_ID      the provider's client ID                  (Worker secret)
+//   OIDC_CLIENT_SECRET  the provider's client secret              (Worker secret)
+//   SESSION_SECRET      a long random string, 32+ characters      (Worker secret)
+
+import { esc, shell } from "./blog.js";
+
+const HOSTS = ["livenet.host", "livenet.beer"];
+const SESSION_COOKIE = "ln_session";
+const LOGIN_COOKIE = "ln_login";
+const SESSION_SECONDS = 24 * 3600;
+const LOGIN_SECONDS = 600;
+
+const encoder = new TextEncoder();
+const now = () => Math.floor(Date.now() / 1000);
+
+// ---- Encoding and signing --------------------------------------------------
+
+const toB64u = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const fromB64u = (text) => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/") + "=".repeat((4 - (text.length % 4)) % 4)), (c) => c.charCodeAt(0));
+const randomToken = (bytes = 32) => toB64u(crypto.getRandomValues(new Uint8Array(bytes)));
+
+const hmacKey = (env) => crypto.subtle.importKey("raw", encoder.encode(env.SESSION_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+
+async function sign(env, payload) {
+  const body = toB64u(encoder.encode(JSON.stringify(payload)));
+  const signature = toB64u(await crypto.subtle.sign("HMAC", await hmacKey(env), encoder.encode(body)));
+  return `${body}.${signature}`;
+}
+
+// Returns the payload if the signature is valid and it hasn't expired, otherwise null.
+async function unsign(env, value, type) {
+  if (typeof value !== "string") return null;
+  const [body, signature] = value.split(".");
+  if (!body || !signature) return null;
+  try {
+    const valid = await crypto.subtle.verify("HMAC", await hmacKey(env), fromB64u(signature), encoder.encode(body));
+    if (!valid) return null;
+    const payload = JSON.parse(new TextDecoder().decode(fromB64u(body)));
+    return payload.typ === type && payload.exp > now() ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+const readCookie = (request, name) => {
+  const found = (request.headers.get("Cookie") ?? "").split(/;\s*/).find((c) => c.startsWith(`${name}=`));
+  return found ? found.slice(name.length + 1) : null;
+};
+const setCookie = (name, value, maxAge) => `${name}=${value}; Path=/; Max-Age=${maxAge}; HttpOnly; Secure; SameSite=Lax`;
+
+// Only same-site paths, never another site (blocks open redirects).
+const safeNext = (value) => (typeof value === "string" && /^\/(?!\/)[^\\\r\n]*$/.test(value) ? value : "/");
+
+// ---- Session ---------------------------------------------------------------
+
+const configured = (env) => Boolean(env.OIDC_ISSUER && env.OIDC_CLIENT_ID && env.OIDC_CLIENT_SECRET && String(env.SESSION_SECRET ?? "").length >= 32);
+
+// The signed-in person, or null. Other files (comments, etc.) can import this.
+export async function getSession(request, env) {
+  if (!configured(env)) return null;
+  return unsign(env, readCookie(request, SESSION_COOKIE), "session");
+}
+
+// ---- OpenID Connect --------------------------------------------------------
+
+let discoveryCache = { issuer: "", at: 0, config: null };
+
+async function discovery(env) {
+  if (discoveryCache.issuer === env.OIDC_ISSUER && Date.now() - discoveryCache.at < 3600_000) return discoveryCache.config;
+  const response = await fetch(`${env.OIDC_ISSUER.replace(/\/?$/, "/")}.well-known/openid-configuration`);
+  if (!response.ok) throw new Error("Could not reach the sign-in service.");
+  const config = await response.json();
+  discoveryCache = { issuer: env.OIDC_ISSUER, at: Date.now(), config };
+  return config;
+}
+
+// ---- Pages -----------------------------------------------------------------
+
+const html = (body, status = 200, extra = {}) =>
+  new Response(body, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex", ...extra } });
+
+const messagePage = (title, message, status) =>
+  html(shell({ title: `${title} — LiveNet`, body: `<div class="wrap page-title"><h1>${esc(title)}</h1><p class="lead">${esc(message)}</p><p><a class="btn btn-primary" href="/auth/login">Try again</a> <a class="btn btn-ghost" href="/">Home</a></p></div>` }), status);
+
+function accountPage(session) {
+  const body = `<div class="wrap page-title"><h1>Your account</h1><p class="lead">Signed in with your LiveNet account.</p></div>
+<section><div class="wrap"><div class="grid">
+<div class="card"><span class="tag">Name</span><h3>${esc(session.name || session.username)}</h3><p>${esc(session.email)}</p></div>
+<div class="card"><span class="tag">Username</span><h3>${esc(session.username)}</h3><p>Use this to sign in everywhere on LiveNet.</p></div>
+</div>
+<p class="mt btn-row"><a class="btn btn-primary" href="https://panel.livenet.host/login">Open the panel</a>
+<form method="post" action="/auth/logout" class="inline"><button class="btn btn-ghost" type="submit">Sign out</button></form></p>
+</div></section>`;
+  return html(shell({ title: "Your account — LiveNet", body }));
+}
+
+// ---- Routes ----------------------------------------------------------------
+
+export async function handleAuth(request, env) {
+  const url = new URL(request.url);
+  if (!HOSTS.includes(url.hostname)) return new Response("Not found.", { status: 404 });
+  if (!configured(env)) return messagePage("Sign-in isn't set up yet", "Please try again later.", 503);
+
+  const redirectUri = `https://${url.hostname}/auth/callback`;
+
+  if (url.pathname === "/auth/login" && request.method === "GET") {
+    try {
+      const config = await discovery(env);
+      const state = randomToken();
+      const nonce = randomToken();
+      const verifier = randomToken(48);
+      const challenge = toB64u(await crypto.subtle.digest("SHA-256", encoder.encode(verifier)));
+
+      const authorize = new URL(config.authorization_endpoint);
+      authorize.search = new URLSearchParams({
+        response_type: "code", client_id: env.OIDC_CLIENT_ID, redirect_uri: redirectUri,
+        scope: "openid profile email", state, nonce, code_challenge: challenge, code_challenge_method: "S256",
+      }).toString();
+
+      const login = await sign(env, { typ: "login", state, nonce, verifier, host: url.hostname, next: safeNext(url.searchParams.get("next")), exp: now() + LOGIN_SECONDS });
+      return new Response(null, { status: 302, headers: { Location: authorize.toString(), "Set-Cookie": setCookie(LOGIN_COOKIE, login, LOGIN_SECONDS), "Cache-Control": "no-store" } });
+    } catch {
+      return messagePage("Sign-in is unavailable", "We couldn't reach the sign-in service. Please try again in a moment.", 502);
+    }
+  }
+
+  if (url.pathname === "/auth/callback" && request.method === "GET") {
+    const login = await unsign(env, readCookie(request, LOGIN_COOKIE), "login");
+    const state = url.searchParams.get("state");
+    if (!login || login.host !== url.hostname || !state || state !== login.state) {
+      return messagePage("Sign-in expired", "Your sign-in took too long or didn't start here. Please try again.", 400);
+    }
+    const code = url.searchParams.get("code");
+    if (url.searchParams.get("error") || !code) return messagePage("Sign-in was cancelled", "No changes were made.", 400);
+
+    try {
+      const config = await discovery(env);
+      const tokenResponse = await fetch(config.token_endpoint, {
+        method: "POST",
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: new URLSearchParams({
+          grant_type: "authorization_code", code, redirect_uri: redirectUri,
+          client_id: env.OIDC_CLIENT_ID, client_secret: env.OIDC_CLIENT_SECRET, code_verifier: login.verifier,
+        }),
+      });
+      if (!tokenResponse.ok) throw new Error("token");
+      const tokens = await tokenResponse.json();
+
+      // The token came straight from Authentik over HTTPS. Check who it's for and that it's fresh.
+      const claims = JSON.parse(new TextDecoder().decode(fromB64u(String(tokens.id_token).split(".")[1])));
+      const audience = [].concat(claims.aud);
+      if (claims.iss !== config.issuer || !audience.includes(env.OIDC_CLIENT_ID) || !(claims.exp > now()) || claims.nonce !== login.nonce) throw new Error("claims");
+
+      const profileResponse = await fetch(config.userinfo_endpoint, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
+      if (!profileResponse.ok) throw new Error("userinfo");
+      const profile = await profileResponse.json();
+      if (!profile.sub || profile.sub !== claims.sub) throw new Error("subject");
+
+      const session = await sign(env, {
+        typ: "session", sub: profile.sub, username: String(profile.preferred_username ?? "").slice(0, 100),
+        name: String(profile.name ?? "").slice(0, 100), email: String(profile.email ?? "").slice(0, 200),
+        groups: [].concat(profile.groups ?? []).map(String).slice(0, 20), exp: now() + SESSION_SECONDS,
+      });
+      const headers = new Headers({ Location: login.next, "Cache-Control": "no-store" });
+      headers.append("Set-Cookie", setCookie(SESSION_COOKIE, session, SESSION_SECONDS));
+      headers.append("Set-Cookie", setCookie(LOGIN_COOKIE, "", 0));
+      return new Response(null, { status: 302, headers });
+    } catch {
+      return messagePage("Sign-in failed", "Something went wrong while signing you in. Please try again.", 400);
+    }
+  }
+
+  if (url.pathname === "/auth/logout" && request.method === "POST") {
+    // Only accept a sign-out from our own pages.
+    const origin = request.headers.get("Origin");
+    if (!origin || new URL(origin).host !== url.host) return new Response("Forbidden.", { status: 403 });
+    return new Response(null, { status: 303, headers: { Location: "/", "Set-Cookie": setCookie(SESSION_COOKIE, "", 0), "Cache-Control": "no-store" } });
+  }
+
+  if (url.pathname === "/auth/me" && request.method === "GET") {
+    const session = await getSession(request, env);
+    return new Response(JSON.stringify(session ? { name: session.name || session.username, username: session.username } : { signedIn: false }), {
+      status: session ? 200 : 401, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
+    });
+  }
+
+  if (url.pathname === "/account" && request.method === "GET") {
+    const session = await getSession(request, env);
+    if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account", "Cache-Control": "no-store" } });
+    return accountPage(session);
+  }
+
+  return new Response("Not found.", { status: 404 });
+}

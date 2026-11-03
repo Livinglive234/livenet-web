@@ -13,6 +13,8 @@ Page scaling uses FRS (Fluid Responsive Scaling) by Sheldon Schwartz, [mobileobj
   - `js/beta.js`: sends the beta form
 - `src/worker.js`: the server code that receives the form (Cloudflare Worker)
 - `src/admin.js`: the private `/admin` dashboard (setup in `docs/admin.md`)
+- `src/auth.js`: Sign in with LiveNet (setup in `docs/signin.md`)
+- `src/blog.js`: the blog
 - `wrangler.jsonc`: Cloudflare settings
 
 ## Preview locally

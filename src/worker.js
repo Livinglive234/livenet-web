@@ -1,4 +1,5 @@
 import { handleAdmin } from "./admin.js";
+import { handleAuth } from "./auth.js";
 import { handleBlog } from "./blog.js";
 
 // Cloudflare Worker for livenet.host.
@@ -108,6 +109,8 @@ export default {
     if (pathname === "/admin" || pathname.startsWith("/admin/")) return handleAdmin(request, env);
 
     if (pathname === "/blog" || pathname.startsWith("/blog/")) return handleBlog(request, env);
+
+    if (pathname.startsWith("/auth/") || pathname === "/account") return handleAuth(request, env);
 
     return env.ASSETS.fetch(request);
   },
