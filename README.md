@@ -8,7 +8,7 @@ Page scaling uses FRS (Fluid Responsive Scaling) by Sheldon Schwartz, [mobileobj
 ## Files
 
 - `public/`: the website itself
-  - `index.html`, `minecraft/`, `hosting/`, `projects/`, `beta/`: the pages
+  - `index.html`, `minecraft/`, `hosting/`, `projects/`: the pages (`/beta/` is drawn by `src/auth.js`, because it needs the signed-in account)
   - `css/style.css`: all styling. The brand colors are `--brand` and `--accent` at the top.
   - `js/beta.js`: sends the beta form
 - `src/worker.js`: the server code that receives the form (Cloudflare Worker)
@@ -37,6 +37,7 @@ The panel at panel.livenet.host is separate and runs on its own server.
 
 ## Protecting the beta form
 
+- Only signed-in people can send a request. `/beta/` sends signed-out visitors to the login first, and `/api/beta` refuses requests without a session. The email on a request is always the signed-in account's, whatever the form sends. The page shows it as read-only.
 - Each email can only be saved once.
 - Turnstile: the widget's site key is already in `public/beta/index.html`. Add the widget's **secret key** as a Worker secret named `TURNSTILE_SECRET`
   (Worker → Settings → Variables and Secrets, or `wrangler secret put TURNSTILE_SECRET`). Never put it in the repo.

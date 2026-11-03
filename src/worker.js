@@ -1,5 +1,5 @@
 import { handleAdmin } from "./admin.js";
-import { handleAuth } from "./auth.js";
+import { getSession, handleAuth } from "./auth.js";
 import { handleBlog } from "./blog.js";
 
 // Cloudflare Worker for livenet.host.
@@ -53,13 +53,19 @@ async function handleBeta(request, env) {
   // Honeypot: bots fill this in. Pretend it worked.
   if (data.website) return json({ ok: true });
 
+  // Only signed-in people can ask for access, and the email is always the account's, whatever
+  // the form sent. (The page shows it as read-only, but that is only a convenience.)
+  const session = await getSession(request, env);
+  if (!session) return json({ error: "Please sign in to request beta access." }, 401);
+  if (!session.email) return json({ error: "Your account has no email address, so we can't take a request." }, 400);
+
   // Turnstile gate. Runs before anything else and fails closed.
   if (!(await passesTurnstile(data, request, env))) {
     return json({ error: "Verification failed. Please reload the page and try again." }, 400);
   }
 
   const name = String(data.name ?? "").trim().slice(0, 100);
-  const email = String(data.email ?? "").trim().slice(0, 200);
+  const email = String(session.email).trim().slice(0, 200);
   const use = String(data.use ?? "").trim().slice(0, 100);
   const reason = String(data.reason ?? "").trim().slice(0, 2000);
 
@@ -107,6 +113,8 @@ export default {
     }
 
     if (pathname === "/admin" || pathname.startsWith("/admin/")) return handleAdmin(request, env);
+
+    if (pathname === "/beta" || pathname === "/beta/") return handleAuth(request, env);
 
     if (pathname === "/blog" || pathname.startsWith("/blog/")) return handleBlog(request, env);
 

@@ -24,6 +24,12 @@ form.addEventListener("submit", async (event) => {
     });
     const result = await response.json().catch(() => ({}));
 
+    // Signed out (the session ended while the page was open): go and sign in, then come back.
+    if (response.status === 401) {
+      location.href = "/auth/login?next=/beta/";
+      return;
+    }
+
     if (!response.ok) throw new Error(result.error || "Something went wrong.");
 
     form.reset();

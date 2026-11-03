@@ -132,6 +132,42 @@ function accountPage(session) {
   return html(shell({ title: "Your account — LiveNet", body }));
 }
 
+// The beta request page. Only for signed-in people: their account email is filled in and
+// cannot be changed. (The form handler in worker.js enforces this too, so editing the page
+// in the browser does nothing.)
+function betaPage(session) {
+  const body = `<div class="wrap page-title"><h1>Request beta access</h1><p class="lead">LiveNet is invite-only right now. Tell me a bit about yourself and I'll review your request. Signed in as ${esc(session.username || session.email)}.</p></div>
+<section><div class="wrap">
+<form id="beta-form" novalidate>
+<label>Name
+<input name="name" type="text" required maxlength="100" autocomplete="name" value="${esc(session.name)}">
+</label>
+<label>Email <small>This is your LiveNet account's email. It can't be changed here.</small>
+<input name="email" type="email" required maxlength="200" value="${esc(session.email)}" readonly aria-readonly="true">
+</label>
+<label>Intended use
+<select name="use" required>
+<option value="">Choose one…</option>
+<option>Minecraft network (playing)</option>
+<option>Game server hosting</option>
+<option>Both</option>
+<option>Other</option>
+</select>
+</label>
+<label>Background or reason for request <small>Your experience, what you'd run or play, or why you want in.</small>
+<textarea name="reason" required maxlength="2000"></textarea>
+</label>
+<input class="hp" name="website" type="text" tabindex="-1" autocomplete="off" aria-hidden="true">
+<div class="cf-turnstile" data-sitekey="0x4AAAAAAFxhFjikmYHsXfLX" data-action="beta-request"></div>
+<div id="status" class="status" role="status"></div>
+<div><button class="btn btn-primary" type="submit">Send request</button></div>
+</form>
+</div></section>
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>
+<script src="/js/beta.js"></script>`;
+  return html(shell({ title: "Request beta access — LiveNet", description: "Request access to the LiveNet invite-only beta.", body }));
+}
+
 function mfaHeadline(session) {
   if (session.mfa === true) return "Two-factor is on";
   if (session.mfa === false) return "Two-factor is off";
@@ -279,6 +315,12 @@ export async function handleAuth(request, env) {
     return new Response(JSON.stringify(session ? { name: session.name || session.username, username: session.username } : { signedIn: false }), {
       status: session ? 200 : 401, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
+  }
+
+  if ((url.pathname === "/beta" || url.pathname === "/beta/") && request.method === "GET") {
+    const session = await getSession(request, env);
+    if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/beta/", "Cache-Control": "no-store" } });
+    return betaPage(session);
   }
 
   if (url.pathname === "/account/2fa" && request.method === "GET") {
