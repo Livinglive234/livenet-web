@@ -95,8 +95,8 @@ async function discovery(env) {
 const html = (body, status = 200, extra = {}) =>
   new Response(body, { status, headers: { "Content-Type": "text/html; charset=utf-8", "Cache-Control": "no-store", "X-Robots-Tag": "noindex", ...extra } });
 
-const messagePage = (title, message, status) =>
-  html(shell({ title: `${title} — LiveNet`, body: `<div class="wrap page-title"><h1>${esc(title)}</h1><p class="lead">${esc(message)}</p><p><a class="btn btn-primary" href="/auth/login">Try again</a> <a class="btn btn-ghost" href="/">Home</a></p></div>` }), status);
+const messagePage = (title, message, status, detail = "") =>
+  html(shell({ title: `${title} — LiveNet`, body: `<div class="wrap page-title"><h1>${esc(title)}</h1><p class="lead">${esc(message)}</p>${detail ? `<p class="lead">Details: ${esc(detail)}</p>` : ""}<p><a class="btn btn-primary" href="/auth/login">Try again</a> <a class="btn btn-ghost" href="/">Home</a></p></div>` }), status);
 
 function accountPage(session) {
   const body = `<div class="wrap page-title"><h1>Your account</h1><p class="lead">Signed in with your LiveNet account.</p></div>
@@ -159,18 +159,25 @@ export async function handleAuth(request, env) {
           client_id: env.OIDC_CLIENT_ID, client_secret: env.OIDC_CLIENT_SECRET, code_verifier: login.verifier,
         }),
       });
-      if (!tokenResponse.ok) throw new Error("token");
+      if (!tokenResponse.ok) {
+        const failure = await tokenResponse.json().catch(() => ({}));
+        throw new Error(`token exchange returned ${tokenResponse.status} ${String(failure.error ?? "").slice(0, 60)}`.trim());
+      }
       const tokens = await tokenResponse.json();
+      if (!tokens.id_token || !tokens.access_token) throw new Error("token response had no id_token or access_token (is the openid scope enabled?)");
 
       // The token came straight from Authentik over HTTPS. Check who it's for and that it's fresh.
       const claims = JSON.parse(new TextDecoder().decode(fromB64u(String(tokens.id_token).split(".")[1])));
       const audience = [].concat(claims.aud);
-      if (claims.iss !== config.issuer || !audience.includes(env.OIDC_CLIENT_ID) || !(claims.exp > now()) || claims.nonce !== login.nonce) throw new Error("claims");
+      if (claims.iss !== config.issuer) throw new Error(`issuer mismatch: token says ${String(claims.iss).slice(0, 120)}, expected ${config.issuer}`);
+      if (!audience.includes(env.OIDC_CLIENT_ID)) throw new Error("token was issued for a different client ID");
+      if (!(claims.exp > now())) throw new Error("token already expired (check the server clocks)");
+      if (claims.nonce !== login.nonce) throw new Error("nonce mismatch");
 
       const profileResponse = await fetch(config.userinfo_endpoint, { headers: { Authorization: `Bearer ${tokens.access_token}` } });
-      if (!profileResponse.ok) throw new Error("userinfo");
+      if (!profileResponse.ok) throw new Error(`userinfo returned ${profileResponse.status}`);
       const profile = await profileResponse.json();
-      if (!profile.sub || profile.sub !== claims.sub) throw new Error("subject");
+      if (!profile.sub || profile.sub !== claims.sub) throw new Error("userinfo is for a different user than the token");
 
       const session = await sign(env, {
         typ: "session", sub: profile.sub, username: String(profile.preferred_username ?? "").slice(0, 100),
@@ -181,8 +188,8 @@ export async function handleAuth(request, env) {
       headers.append("Set-Cookie", setCookie(SESSION_COOKIE, session, SESSION_SECONDS));
       headers.append("Set-Cookie", setCookie(LOGIN_COOKIE, "", 0));
       return new Response(null, { status: 302, headers });
-    } catch {
-      return messagePage("Sign-in failed", "Something went wrong while signing you in. Please try again.", 400);
+    } catch (error) {
+      return messagePage("Sign-in failed", "Something went wrong while signing you in. Please try again.", 400, error.message);
     }
   }
 
