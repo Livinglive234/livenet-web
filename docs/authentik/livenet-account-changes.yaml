@@ -1,0 +1,203 @@
+# Two Authentik flows that let a signed-in person change their own username or email.
+# Import as a blueprint (see docs/signin.md, "Changing a username or email").
+#
+#   livenet-change-username   asks for the new username and saves it.
+#   livenet-change-email      asks for the new email, emails a confirmation link to that NEW address,
+#                             and only saves the change once the link is clicked.
+#
+# Both finish by sending the person to https://livenet.host/account/sync, which copies the change
+# to the panel. Change that address below if the site lives somewhere else.
+version: 1
+metadata:
+  name: LiveNet - Change username or email
+entries:
+  # ---- Username ------------------------------------------------------------
+  - model: authentik_flows.flow
+    id: username-flow
+    identifiers:
+      slug: livenet-change-username
+    attrs:
+      name: LiveNet change username
+      title: Change your username
+      designation: stage_configuration
+      authentication: require_authenticated
+
+  - model: authentik_policies_expression.expressionpolicy
+    id: username-policy
+    identifiers:
+      name: livenet-change-username-format
+    attrs:
+      expression: |
+        import re
+        username = (request.context.get("prompt_data") or {}).get("username", "")
+        # Lowercase letters, digits, dot, dash and underscore; starts and ends with a letter or digit.
+        # (The panel looks usernames up in lowercase, so capitals would break SFTP.)
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]{1,30}[a-z0-9]", username):
+            ak_message("Usernames are 3 to 32 characters: lowercase letters, numbers, dots, dashes and underscores. They must start and end with a letter or number.")
+            return False
+        return True
+
+  - model: authentik_stages_prompt.prompt
+    id: username-field
+    identifiers:
+      name: livenet-change-username-field
+    attrs:
+      field_key: username
+      label: New username
+      type: username
+      required: true
+      placeholder: New username
+      placeholder_expression: false
+      order: 100
+      initial_value: |
+        try:
+            return user.username
+        except:
+            return ''
+      initial_value_expression: true
+
+  - model: authentik_stages_prompt.promptstage
+    id: username-prompt
+    identifiers:
+      name: livenet-change-username-prompt
+    attrs:
+      fields:
+        - !KeyOf username-field
+      validation_policies:
+        - !KeyOf username-policy
+
+  - model: authentik_stages_user_write.userwritestage
+    id: username-write
+    identifiers:
+      name: livenet-change-username-write
+    attrs:
+      user_creation_mode: never_create
+
+  - model: authentik_stages_redirect.redirectstage
+    id: username-redirect
+    identifiers:
+      name: livenet-change-username-redirect
+    attrs:
+      mode: static
+      target_static: https://livenet.host/account/sync
+      keep_context: false
+
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 10, stage: !KeyOf username-prompt, target: !KeyOf username-flow}
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 20, stage: !KeyOf username-write, target: !KeyOf username-flow}
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 30, stage: !KeyOf username-redirect, target: !KeyOf username-flow}
+
+  # ---- Email ---------------------------------------------------------------
+  - model: authentik_flows.flow
+    id: email-flow
+    identifiers:
+      slug: livenet-change-email
+    attrs:
+      name: LiveNet change email
+      title: Change your email address
+      designation: stage_configuration
+      authentication: require_authenticated
+
+  - model: authentik_policies_expression.expressionpolicy
+    id: email-policy
+    identifiers:
+      name: livenet-change-email-check
+    attrs:
+      expression: |
+        from authentik.core.models import User
+        email = ((request.context.get("prompt_data") or {}).get("email") or "").strip()
+        if not email:
+            return False
+        if email.lower() == (request.user.email or "").lower():
+            ak_message("That is already your email address.")
+            return False
+        if User.objects.filter(email__iexact=email).exclude(pk=request.user.pk).exists():
+            ak_message("That email address is already used by another LiveNet account.")
+            return False
+        return True
+
+  # Sends the confirmation email to the NEW address instead of the one on the account.
+  - model: authentik_policies_expression.expressionpolicy
+    id: email-override-policy
+    identifiers:
+      name: livenet-change-email-send-to-new-address
+    attrs:
+      expression: |
+        new_email = ((request.context.get("prompt_data") or {}).get("email") or "").strip()
+        if new_email:
+            request.context["flow_plan"].context["email"] = new_email
+        return True
+
+  - model: authentik_stages_prompt.prompt
+    id: email-field
+    identifiers:
+      name: livenet-change-email-field
+    attrs:
+      field_key: email
+      label: New email address
+      type: email
+      required: true
+      placeholder: you@example.com
+      placeholder_expression: false
+      order: 100
+
+  - model: authentik_stages_prompt.promptstage
+    id: email-prompt
+    identifiers:
+      name: livenet-change-email-prompt
+    attrs:
+      fields:
+        - !KeyOf email-field
+      validation_policies:
+        - !KeyOf email-policy
+
+  - model: authentik_stages_email.emailstage
+    id: email-verify
+    identifiers:
+      name: livenet-change-email-verify
+    attrs:
+      use_global_settings: true
+      template: email/account_confirmation.html
+      subject: Confirm your new LiveNet email address
+      activate_user_on_success: false
+
+  - model: authentik_stages_user_write.userwritestage
+    id: email-write
+    identifiers:
+      name: livenet-change-email-write
+    attrs:
+      user_creation_mode: never_create
+
+  - model: authentik_stages_redirect.redirectstage
+    id: email-redirect
+    identifiers:
+      name: livenet-change-email-redirect
+    attrs:
+      mode: static
+      target_static: https://livenet.host/account/sync
+      keep_context: false
+
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 10, stage: !KeyOf email-prompt, target: !KeyOf email-flow}
+  - model: authentik_flows.flowstagebinding
+    id: email-verify-binding
+    identifiers: {order: 20, stage: !KeyOf email-verify, target: !KeyOf email-flow}
+    attrs:
+      evaluate_on_plan: false
+      re_evaluate_policies: true
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 30, stage: !KeyOf email-write, target: !KeyOf email-flow}
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 40, stage: !KeyOf email-redirect, target: !KeyOf email-flow}
+
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !KeyOf email-verify-binding
+      policy: !KeyOf email-override-policy
+      order: 0
+    attrs:
+      negate: false
+      enabled: true
+      timeout: 30

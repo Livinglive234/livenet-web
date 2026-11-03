@@ -35,6 +35,18 @@ Two things keep the site's own session (a 24 hour cookie) in step with Authentik
 
 Notices are per person, not per device: ending one Authentik login signs that person out of the site everywhere.
 
+### Changing a username or email
+
+The account page has **Change username** and **Change email** links. They open two Authentik flows, and when a flow finishes it sends the person to `/account/sync`, which copies the change to the panel (the panel never pulls it).
+
+1. **Create the flows.** Import `docs/authentik/livenet-account-changes.yaml` as a blueprint (copy it into Authentik's blueprints folder, e.g. `/blueprints/custom/`, then Customization → Blueprints → Create → pick it). It creates `livenet-change-username` and `livenet-change-email`.
+   - Username: format-checked (lowercase letters, numbers, `.`, `-`, `_`; 3 to 32 characters), and Authentik already rejects duplicates.
+   - Email: the new address must not belong to another account, and a confirmation link is emailed to the **new** address. The change is only saved once the link is clicked.
+2. **Panel API key.** In the panel: Admin → API Keys → Application. Create a key with only **Users: read & write** (everything else none). Add it as a Worker secret named `PELICAN_USERS_API_KEY`. `PELICAN_URL` (already used by the admin page) must also be set.
+3. **How the sync works.** After a flow, `/account/sync` does a quiet sign-in (`prompt=none`) to fetch the new details from Authentik, finds the panel account by the *old* email, and updates its username and email through the panel's API. The account page then says whether the panel was updated.
+   - Root admins can't be edited through the panel's API, so their panel details are skipped (the page says the panel will catch up).
+   - If the panel can't be reached, the change still stands in Authentik, and the page says so. The plugin's username sync at panel sign-in is the fallback for usernames; email has no fallback, so tell us if the page reports a failure.
+
 ### Showing 2FA status on the site (optional)
 
 The 2FA page and the account page can show whether someone has two-factor turned on. Authentik tells the site through a small scope mapping. Until this is set up, the pages show "status unknown" and nothing breaks.

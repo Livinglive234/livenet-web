@@ -29,6 +29,10 @@ const PANEL_SIGN_IN = "https://panel.livenet.host/auth/oauth/redirect/authentik"
 
 // Authentik's built-in two-factor setup flows. They work for any signed-in user, including
 // accounts that cannot open Authentik's normal settings pages.
+// Authentik flows for changing a username or email (see docs/authentik/livenet-account-changes.yaml).
+// Each ends by sending the person to /account/sync, which pushes the change to the panel.
+const CHANGE_USERNAME = "https://auth.livenet.host/if/flow/livenet-change-username/";
+const CHANGE_EMAIL = "https://auth.livenet.host/if/flow/livenet-change-email/";
 const MFA_AUTHENTICATOR_SETUP = "https://auth.livenet.host/if/flow/default-authenticator-totp-setup/";
 const MFA_BACKUP_CODES_SETUP = "https://auth.livenet.host/if/flow/default-authenticator-static-setup/";
 
@@ -106,6 +110,35 @@ export async function getSession(request, env) {
 const dueForRecheck = (session) => !(session.chk > now() - RECHECK_SECONDS);
 const recheckRedirect = (path) =>
   new Response(null, { status: 302, headers: { Location: `/auth/login?silent=1&next=${encodeURIComponent(path)}`, "Cache-Control": "no-store" } });
+
+// ---- Keeping the panel in step ---------------------------------------------
+
+// Pushes a changed username or email to the panel (Pelican application API), looking the account
+// up by the email it had before. Returns "same", "ok", "skipped" or "failed".
+async function syncPanel(env, before, after) {
+  const changes = {};
+  if (after.email && after.email !== before.email) changes.email = after.email;
+  if (after.username && after.username !== before.username) changes.username = after.username;
+  if (!Object.keys(changes).length) return "same";
+  if (!env.PELICAN_URL || !env.PELICAN_USERS_API_KEY || !before.email) return "skipped";
+
+  const base = String(env.PELICAN_URL).replace(/\/+$/, "");
+  const headers = { Authorization: `Bearer ${env.PELICAN_USERS_API_KEY}`, Accept: "application/json", "Content-Type": "application/json" };
+  try {
+    const found = await fetch(`${base}/api/application/users?filter[email]=${encodeURIComponent(before.email)}`, { headers });
+    if (!found.ok) return "failed";
+    // The filter matches partially, so keep only the exact address, and only if there is exactly one.
+    const matches = ((await found.json()).data ?? []).filter((u) => String(u.attributes?.email ?? "").toLowerCase() === before.email.toLowerCase());
+    if (matches.length !== 1) return "failed";
+
+    const response = await fetch(`${base}/api/application/users/${matches[0].attributes.id}`, { method: "PATCH", headers, body: JSON.stringify(changes) });
+    // The panel's API refuses to edit root admins; those are managed by hand.
+    if (response.status === 403) return "skipped";
+    return response.ok ? "ok" : "failed";
+  } catch {
+    return "failed";
+  }
+}
 
 // ---- Back-channel logout ---------------------------------------------------
 
@@ -186,11 +219,19 @@ const html = (body, status = 200, extra = {}) =>
 const messagePage = (title, message, status, detail = "") =>
   html(shell({ title: `${title} — LiveNet`, body: `<div class="wrap page-title"><h1>${esc(title)}</h1><p class="lead">${esc(message)}</p>${detail ? `<p class="lead">Details: ${esc(detail)}</p>` : ""}<p><a class="btn btn-primary" href="/auth/login">Try again</a> <a class="btn btn-ghost" href="/">Home</a></p></div>` }), status);
 
-function accountPage(session) {
-  const body = `<div class="wrap page-title"><h1>Your account</h1><p class="lead">Signed in with your LiveNet account.</p></div>
+const PANEL_NOTICES = {
+  ok: ["ok", "Saved. Your LiveNet account and the panel are both updated."],
+  skipped: ["ok", "Saved on your LiveNet account. The panel keeps its own copy of this detail; it will catch up the next time you sign in to it."],
+  failed: ["err", "Saved on your LiveNet account, but updating the panel failed. Your servers are not affected. Please let us know if the panel still shows the old details."],
+};
+
+function accountPage(session, panel = null) {
+  const [noticeKind, noticeText] = PANEL_NOTICES[panel] ?? [];
+  const notice = noticeText ? `<p class="status ${noticeKind}" role="status">${esc(noticeText)}</p>` : "";
+  const body = `<div class="wrap page-title"><h1>Your account</h1><p class="lead">Signed in with your LiveNet account.</p>${notice}</div>
 <section><div class="wrap"><div class="grid">
-<div class="card"><span class="tag">Name</span><h3>${esc(session.name || session.username)}</h3><p>${esc(session.email)}</p></div>
-<div class="card"><span class="tag">Username</span><h3>${esc(session.username)}</h3><p>Use this to sign in everywhere on LiveNet.</p></div>
+<div class="card"><span class="tag">Name</span><h3>${esc(session.name || session.username)}</h3><p>${esc(session.email)}</p><p class="mt"><a href="${CHANGE_EMAIL}">Change email</a></p></div>
+<div class="card"><span class="tag">Username</span><h3>${esc(session.username)}</h3><p>Use this to sign in everywhere on LiveNet.</p><p class="mt"><a href="${CHANGE_USERNAME}">Change username</a></p></div>
 <div class="card"><span class="tag">Security</span><h3>${esc(mfaHeadline(session))}</h3><p><a href="/account/2fa">Two-factor authentication</a></p></div>
 </div>
 <p class="mt btn-row"><a class="btn btn-primary" href="${PANEL_SIGN_IN}">Open the panel</a>
@@ -287,7 +328,8 @@ export async function handleAuth(request, env) {
 
   if (url.pathname === "/auth/login" && request.method === "GET") {
     try {
-      const silent = url.searchParams.get("silent") === "1";
+      const sync = url.searchParams.get("sync") === "1";
+      const silent = sync || url.searchParams.get("silent") === "1";
       const config = await discovery(env);
       const state = randomToken();
       const nonce = randomToken();
@@ -301,7 +343,7 @@ export async function handleAuth(request, env) {
         ...(silent ? { prompt: "none" } : {}),
       }).toString();
 
-      const login = await sign(env, { typ: "login", state, nonce, verifier, host: url.hostname, silent, next: safeNext(url.searchParams.get("next")), exp: now() + LOGIN_SECONDS });
+      const login = await sign(env, { typ: "login", state, nonce, verifier, host: url.hostname, silent, sync, next: safeNext(url.searchParams.get("next")), exp: now() + LOGIN_SECONDS });
       return new Response(null, { status: 302, headers: { Location: authorize.toString(), "Set-Cookie": setCookie(LOGIN_COOKIE, login, LOGIN_SECONDS), "Cache-Control": "no-store" } });
     } catch {
       return messagePage("Sign-in is unavailable", "We couldn't reach the sign-in service. Please try again in a moment.", 502);
@@ -366,7 +408,14 @@ export async function handleAuth(request, env) {
         iat: Number.isFinite(claims.iat) ? Math.floor(claims.iat) : now(), chk: now(),
         exp: now() + SESSION_SECONDS,
       });
-      const headers = new Headers({ Location: login.next, "Cache-Control": "no-store" });
+      let location = login.next;
+      if (login.sync) {
+        // Back from changing a username or email: tell the panel, comparing against the session we had.
+        const before = await unsign(env, readCookie(request, SESSION_COOKIE), "session");
+        const outcome = before && before.sub === profile.sub ? await syncPanel(env, before, { email: String(profile.email ?? ""), username: String(profile.preferred_username ?? "") }) : "same";
+        location += `${location.includes("?") ? "&" : "?"}panel=${outcome}`;
+      }
+      const headers = new Headers({ Location: location, "Cache-Control": "no-store" });
       headers.append("Set-Cookie", setCookie(SESSION_COOKIE, session, SESSION_SECONDS));
       // Kept so a later sign-out can tell Authentik which login to end (an OIDC "id_token_hint").
       headers.append("Set-Cookie", setCookie(ID_TOKEN_COOKIE, String(tokens.id_token), SESSION_SECONDS));
@@ -428,11 +477,18 @@ export async function handleAuth(request, env) {
     return twoFactorPage(session);
   }
 
+  if (url.pathname === "/account/sync" && request.method === "GET") {
+    const session = await getSession(request, env);
+    if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account", "Cache-Control": "no-store" } });
+    // A quiet sign-in refreshes the details from Authentik; the callback then updates the panel.
+    return new Response(null, { status: 302, headers: { Location: `/auth/login?sync=1&next=${encodeURIComponent("/account")}`, "Cache-Control": "no-store" } });
+  }
+
   if (url.pathname === "/account" && request.method === "GET") {
     const session = await getSession(request, env);
     if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account", "Cache-Control": "no-store" } });
     if (dueForRecheck(session)) return recheckRedirect("/account");
-    return accountPage(session);
+    return accountPage(session, url.searchParams.get("panel"));
   }
 
   return new Response("Not found.", { status: 404 });
