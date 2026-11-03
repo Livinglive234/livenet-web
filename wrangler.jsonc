@@ -12,8 +12,8 @@
   "assets": {
     "directory": "./public",
     "binding": "ASSETS",
-    // Only /api/*, /admin, /blog, /auth/* and /account run the Worker. Everything else is served straight from public/.
-    "run_worker_first": ["/api/*", "/admin", "/admin/*", "/blog", "/blog/*", "/auth/*", "/account"]
+    // Only /api/*, /admin, /blog, /auth/*, /account and /account/* run the Worker. Everything else is served straight from public/.
+    "run_worker_first": ["/api/*", "/admin", "/admin/*", "/blog", "/blog/*", "/auth/*", "/account", "/account/*"]
   },
 
   // Sign in with LiveNet (Authentik). The client ID, client secret and SESSION_SECRET are Worker secrets.

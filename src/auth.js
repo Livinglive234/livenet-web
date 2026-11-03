@@ -23,6 +23,11 @@ const LOGIN_SECONDS = 600;
 // who you are, so this signs you in and lands you in the panel with no extra login screen.
 const PANEL_SIGN_IN = "https://panel.livenet.host/auth/oauth/redirect/authentik";
 
+// Authentik's built-in two-factor setup flows. They work for any signed-in user, including
+// accounts that cannot open Authentik's normal settings pages.
+const MFA_AUTHENTICATOR_SETUP = "https://auth.livenet.host/if/flow/default-authenticator-totp-setup/";
+const MFA_BACKUP_CODES_SETUP = "https://auth.livenet.host/if/flow/default-authenticator-static-setup/";
+
 const encoder = new TextEncoder();
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -110,9 +115,20 @@ function accountPage(session) {
 <div class="card"><span class="tag">Username</span><h3>${esc(session.username)}</h3><p>Use this to sign in everywhere on LiveNet.</p></div>
 </div>
 <p class="mt btn-row"><a class="btn btn-primary" href="${PANEL_SIGN_IN}">Open the panel</a>
+<a class="btn btn-ghost" href="/account/2fa">Two-factor authentication</a>
 <form method="post" action="/auth/logout" class="inline"><button class="btn btn-ghost" type="submit">Sign out</button></form></p>
 </div></section>`;
   return html(shell({ title: "Your account — LiveNet", body }));
+}
+
+function twoFactorPage() {
+  const body = `<div class="wrap page-title"><h1>Two-factor authentication</h1><p class="lead">A second step when you sign in, using a code from an app on your phone. It protects your LiveNet account everywhere: this site and the panel.</p></div>
+<section><div class="wrap"><div class="grid">
+<div class="card"><span class="tag">Recommended</span><h3>Authenticator app</h3><p>Use an app such as Google Authenticator, Authy or your password manager to make 6-digit codes.</p><p class="mt"><a class="btn btn-primary" href="${MFA_AUTHENTICATOR_SETUP}">Set up an authenticator app</a></p></div>
+<div class="card"><span class="tag">Backup</span><h3>Backup codes</h3><p>One-time codes for if you lose your phone. Save them somewhere safe.</p><p class="mt"><a class="btn btn-ghost" href="${MFA_BACKUP_CODES_SETUP}">Get backup codes</a></p></div>
+</div>
+<p class="mt"><a href="/account">← Back to your account</a></p></div></section>`;
+  return html(shell({ title: "Two-factor authentication — LiveNet", body }));
 }
 
 // ---- Routes ----------------------------------------------------------------
@@ -235,6 +251,12 @@ export async function handleAuth(request, env) {
     return new Response(JSON.stringify(session ? { name: session.name || session.username, username: session.username } : { signedIn: false }), {
       status: session ? 200 : 401, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
+  }
+
+  if (url.pathname === "/account/2fa" && request.method === "GET") {
+    const session = await getSession(request, env);
+    if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account/2fa", "Cache-Control": "no-store" } });
+    return twoFactorPage();
   }
 
   if (url.pathname === "/account" && request.method === "GET") {
