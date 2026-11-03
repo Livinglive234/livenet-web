@@ -18,6 +18,10 @@ const LOGIN_COOKIE = "ln_login";
 const SESSION_SECONDS = 24 * 3600;
 const LOGIN_SECONDS = 600;
 
+// "Open the panel" goes straight to the panel's Authentik sign-in. Authentik already knows
+// who you are, so this signs you in and lands you in the panel with no extra login screen.
+const PANEL_SIGN_IN = "https://panel.livenet.host/auth/oauth/redirect/authentik";
+
 const encoder = new TextEncoder();
 const now = () => Math.floor(Date.now() / 1000);
 
@@ -104,7 +108,7 @@ function accountPage(session) {
 <div class="card"><span class="tag">Name</span><h3>${esc(session.name || session.username)}</h3><p>${esc(session.email)}</p></div>
 <div class="card"><span class="tag">Username</span><h3>${esc(session.username)}</h3><p>Use this to sign in everywhere on LiveNet.</p></div>
 </div>
-<p class="mt btn-row"><a class="btn btn-primary" href="https://panel.livenet.host/login">Open the panel</a>
+<p class="mt btn-row"><a class="btn btn-primary" href="${PANEL_SIGN_IN}">Open the panel</a>
 <form method="post" action="/auth/logout" class="inline"><button class="btn btn-ghost" type="submit">Sign out</button></form></p>
 </div></section>`;
   return html(shell({ title: "Your account — LiveNet", body }));
