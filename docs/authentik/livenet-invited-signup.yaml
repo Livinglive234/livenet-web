@@ -121,10 +121,12 @@ entries:
       initial_value: |
         from urllib.parse import parse_qs
         try:
-            stored = request.session.get("authentik/flows/get") or {}
+            # "request" here wraps the real web request, which is request.http_request.
+            http = request.http_request
+            stored = http.session.get("authentik/flows/get") or {}
             value = str(stored.get("email", "") or "")
             if not value:
-                value = (parse_qs(request.GET.get("query", "")).get("email") or [""])[0]
+                value = (parse_qs(http.GET.get("query", "")).get("email") or [""])[0]
             return value.strip()[:200]
         except Exception:
             return ""
