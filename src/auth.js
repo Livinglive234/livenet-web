@@ -36,8 +36,8 @@ const CHANGE_EMAIL = "https://auth.livenet.host/if/flow/livenet-change-email/";
 // Social sign-in sources that can be linked from the account page. SOCIAL_SOURCES (a variable in
 // wrangler.jsonc) lists the slugs that exist in Authentik; empty hides the section.
 const SOCIAL_NAMES = { google: "Google", discord: "Discord", github: "GitHub" };
-// Authentik's built-in flow for choosing a new password, for any signed-in user.
-const CHANGE_PASSWORD = "https://auth.livenet.host/if/flow/default-password-change/";
+// Authentik flow for changing the password: asks for the current one, then emails a confirmation link (see docs/authentik/livenet-change-password.yaml).
+const CHANGE_PASSWORD = "https://auth.livenet.host/if/flow/livenet-change-password/";
 const MFA_AUTHENTICATOR_SETUP = "https://auth.livenet.host/if/flow/default-authenticator-totp-setup/";
 const MFA_BACKUP_CODES_SETUP = "https://auth.livenet.host/if/flow/default-authenticator-static-setup/";
 

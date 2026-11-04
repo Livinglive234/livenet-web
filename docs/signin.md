@@ -129,3 +129,12 @@ Admins use `/if/admin/`, which is unaffected. Reload nginx.
 2. Set `SOCIAL_SOURCES` in `wrangler.jsonc` to the slugs that exist, for example `"google,discord,github"`, and push.
 
 The account page then lists each provider as linked or not, with a Link or Unlink button. Without the token, the buttons show but the linked state can't be read. With `SOCIAL_SOURCES` empty the section is hidden.
+
+## Changing a password
+
+The account page's **Change password** link opens an Authentik flow that asks for the current password, then emails a confirmation link to the account's address, and only then asks for the new password (twice, at least 10 characters).
+
+1. Copy `docs/authentik/livenet-change-password.yaml` into `/opt/authentik/blueprints/` (the same folder as the account-changes blueprint). Authentik applies it within a minute or so; if not, use Apply on its blueprint instance.
+2. Check Flows shows `livenet-change-password`.
+
+The email uses Authentik's `email/password_reset.html` template and the email settings that already send the other emails.
