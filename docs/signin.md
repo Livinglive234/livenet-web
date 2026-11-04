@@ -86,3 +86,46 @@ Set the brand's **Default application** to this app, so people who verify their 
 - Signing in from the header always lands on `/account` (the header link carries `?next=/account`). With no destination at all, you land on the home page. Once signed in, the header shows "Account".
 - The session is a signed cookie that lasts 24 hours. Changing `SESSION_SECRET` signs everyone out.
 - `getSession(request, env)` in `src/auth.js` returns the signed-in person (or null) for other features such as comments.
+
+## Social sign-in (Google, Discord, GitHub)
+
+Social accounts are **linked from the account page** while signed in. They are never matched by email, so nobody can get in (or create an account) just by owning a matching address. Signing in with a social account that isn't linked shows "No LiveNet account is linked to this account."
+
+### 1. Create the OAuth apps (once per provider)
+
+Callback addresses (the last part is the source's slug and must match):
+
+- Google: `https://auth.livenet.host/source/oauth/callback/google/`
+- Discord: `https://auth.livenet.host/source/oauth/callback/discord/`
+- GitHub: `https://auth.livenet.host/source/oauth/callback/github/`
+
+### 2. The "no account" flow
+
+Import `docs/authentik/livenet-social-login.yaml` the same way as the account-changes blueprint (copy it into `/opt/authentik/blueprints/`).
+
+### 3. Add the sources in Authentik
+
+Directory > Federation & Social login > Create, one per provider, with the slugs above and the client ID and secret. On each:
+
+- **User matching mode:** *Use the source-specific identifier* (never email or username matching).
+- **Enrollment flow:** `livenet-social-no-account`.
+- Leave the authentication flow as the default.
+
+Then edit the `default-authentication-flow` identification stage and add the sources under **Sources**.
+
+### 4. Send Authentik's own "linked" landing page to the account page
+
+After a link, Authentik always redirects to `/if/user/#/settings/sources`, which external users can't open. In the nginx config for `auth.livenet.host`, add this inside the `server` block, before the general `location /`:
+
+```nginx
+location = /if/user/ { return 302 https://livenet.host/account; }
+```
+
+Admins use `/if/admin/`, which is unaffected. Reload nginx.
+
+### 5. Show the section on the account page
+
+1. Create an Authentik API token (Directory > Tokens and App passwords) for a user that may view users and view/delete user source connections, and add it as the Worker secret `AUTHENTIK_API_TOKEN`.
+2. Set `SOCIAL_SOURCES` in `wrangler.jsonc` to the slugs that exist, for example `"google,discord,github"`, and push.
+
+The account page then lists each provider as linked or not, with a Link or Unlink button. Without the token, the buttons show but the linked state can't be read. With `SOCIAL_SOURCES` empty the section is hidden.

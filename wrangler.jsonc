@@ -22,7 +22,10 @@
     "OIDC_ISSUER": "https://auth.livenet.host/application/o/livenet-site/",
     // The Authentik scope that reports 2FA status (see docs/signin.md). Empty means the site does
     // not ask for it. If it is set but the scope is missing in Authentik, signing in may fail.
-    "OIDC_MFA_SCOPE": "livenet_mfa"
+    "OIDC_MFA_SCOPE": "livenet_mfa",
+    // Social sign-in sources linked from /account (see docs/signin.md). Slugs of the sources that exist in
+    // Authentik, from: google, discord, github. Empty hides the section.
+    "SOCIAL_SOURCES": ""
   },
 
   // Beta requests. The id is an identifier, not a secret: using the namespace needs

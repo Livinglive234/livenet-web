@@ -1,0 +1,33 @@
+# The enrollment flow for Google, Discord and GitHub sign-in sources.
+#
+# Social accounts are only ever LINKED from the website's account page, never matched by email, so
+# anyone who signs in with a social account that isn't linked gets a dead end instead of a new
+# account. Set this flow as each source's Enrollment flow (see docs/signin.md, "Social sign-in").
+version: 1
+metadata:
+  name: LiveNet - Social sign-in without a linked account
+entries:
+  - model: authentik_flows.flow
+    id: no-account-flow
+    identifiers:
+      slug: livenet-social-no-account
+    attrs:
+      name: LiveNet social sign-in, no linked account
+      title: No LiveNet account found
+      designation: enrollment
+      authentication: none
+
+  - model: authentik_stages_deny.denystage
+    id: no-account-deny
+    identifiers:
+      name: livenet-social-no-account-deny
+    attrs:
+      deny_message: >-
+        No LiveNet account is linked to this account. Sign in with your LiveNet username and password,
+        then link it from your account page at livenet.host/account.
+
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      target: !KeyOf no-account-flow
+      stage: !KeyOf no-account-deny
+      order: 0

@@ -33,6 +33,9 @@ const PANEL_SIGN_IN = "https://panel.livenet.host/auth/oauth/redirect/authentik"
 // Each ends by sending the person to /account/sync, which pushes the change to the panel.
 const CHANGE_USERNAME = "https://auth.livenet.host/if/flow/livenet-change-username/";
 const CHANGE_EMAIL = "https://auth.livenet.host/if/flow/livenet-change-email/";
+// Social sign-in sources that can be linked from the account page. SOCIAL_SOURCES (a variable in
+// wrangler.jsonc) lists the slugs that exist in Authentik; empty hides the section.
+const SOCIAL_NAMES = { google: "Google", discord: "Discord", github: "GitHub" };
 const MFA_AUTHENTICATOR_SETUP = "https://auth.livenet.host/if/flow/default-authenticator-totp-setup/";
 const MFA_BACKUP_CODES_SETUP = "https://auth.livenet.host/if/flow/default-authenticator-static-setup/";
 
@@ -144,6 +147,66 @@ async function syncPanel(env, before, after) {
   }
 }
 
+// ---- Linked sign-ins (Google, Discord, GitHub) --------------------------------
+
+const socialSources = (env) => String(env.SOCIAL_SOURCES ?? "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => SOCIAL_NAMES[x]);
+const authentikBase = (env) => new URL(env.OIDC_ISSUER).origin;
+
+// Looks up the person's Authentik user and their linked sign-ins. Returns
+// { links: { slug: connectionId } }, or { error } when it can't be checked.
+async function linkedSources(env, session) {
+  if (!env.AUTHENTIK_API_TOKEN || !session.username) return { error: "not-configured" };
+  const headers = { Authorization: `Bearer ${env.AUTHENTIK_API_TOKEN}`, Accept: "application/json" };
+  const base = authentikBase(env);
+  try {
+    const users = await fetch(`${base}/api/v3/core/users/?username=${encodeURIComponent(session.username)}`, { headers });
+    if (!users.ok) return { error: "failed" };
+    // Exact username only, and the email must agree with the session too.
+    const user = ((await users.json()).results ?? []).find((u) => String(u.username).toLowerCase() === session.username.toLowerCase());
+    if (!user) return { error: "failed" };
+    if (session.email && user.email && String(user.email).toLowerCase() !== session.email.toLowerCase()) return { error: "failed" };
+
+    const response = await fetch(`${base}/api/v3/sources/user_connections/all/?user=${user.pk}&page_size=100`, { headers });
+    if (!response.ok) return { error: "failed" };
+    const links = {};
+    for (const c of (await response.json()).results ?? []) {
+      const slug = c.source_obj?.slug;
+      if (SOCIAL_NAMES[slug] && Number(c.user) === Number(user.pk)) links[slug] = c.pk;
+    }
+    return { links };
+  } catch {
+    return { error: "failed" };
+  }
+}
+
+async function unlinkSource(env, session, slug) {
+  const found = await linkedSources(env, session);
+  if (!found.links || !(slug in found.links)) return "failed";
+  try {
+    const response = await fetch(`${authentikBase(env)}/api/v3/sources/user_connections/all/${found.links[slug]}/`, {
+      method: "DELETE", headers: { Authorization: `Bearer ${env.AUTHENTIK_API_TOKEN}`, Accept: "application/json" },
+    });
+    return response.ok ? "unlinked" : "failed";
+  } catch {
+    return "failed";
+  }
+}
+
+async function socialCard(env, session) {
+  const slugs = socialSources(env);
+  if (!slugs.length) return "";
+  const found = await linkedSources(env, session);
+  const rows = slugs.map((slug) => {
+    const name = SOCIAL_NAMES[slug];
+    if (found.links && slug in found.links) {
+      return `<li><strong>${name}</strong> linked <form method="post" action="/account/unlink" class="inline"><input type="hidden" name="source" value="${slug}"><button class="btn btn-ghost" type="submit">Unlink</button></form></li>`;
+    }
+    return `<li><strong>${name}</strong> ${found.links ? "not linked" : ""} <a class="btn btn-ghost" href="${authentikBase(env)}/source/oauth/login/${slug}/">Link ${name}</a></li>`;
+  }).join("");
+  const warning = found.error === "failed" ? `<p class="status err" role="status">Couldn't check which are linked right now.</p>` : "";
+  return `<div class="card"><span class="tag">Sign-in options</span><h3>Linked accounts</h3><p>Link Google, Discord or GitHub to sign in with it. Accounts that aren't linked here can't sign in.</p>${warning}<ul class="plain">${rows}</ul></div>`;
+}
+
 // ---- Back-channel logout ---------------------------------------------------
 
 let jwksCache = { at: 0, keys: [] };
@@ -229,14 +292,20 @@ const PANEL_NOTICES = {
   failed: ["err", "Saved on your LiveNet account, but updating the panel failed. Your servers are not affected. Please let us know if the panel still shows the old details."],
 };
 
-function accountPage(session, panel = null) {
-  const [noticeKind, noticeText] = PANEL_NOTICES[panel] ?? [];
+const LINK_NOTICES = {
+  unlinked: ["ok", "That sign-in has been unlinked."],
+  "unlink-failed": ["err", "Couldn't unlink that sign-in. Please try again."],
+};
+
+async function accountPage(env, session, panel = null, link = null) {
+  const [noticeKind, noticeText] = PANEL_NOTICES[panel] ?? LINK_NOTICES[link] ?? [];
   const notice = noticeText ? `<p class="status ${noticeKind}" role="status">${esc(noticeText)}</p>` : "";
   const body = `<div class="wrap page-title"><h1>Your account</h1><p class="lead">Signed in with your LiveNet account.</p>${notice}</div>
 <section><div class="wrap"><div class="grid">
 <div class="card"><span class="tag">Name</span><h3>${esc(session.name || session.username)}</h3><p>${esc(session.email)}</p><p class="mt"><a href="${CHANGE_EMAIL}">Change email</a></p></div>
 <div class="card"><span class="tag">Username</span><h3>${esc(session.username)}</h3><p>Use this to sign in everywhere on LiveNet.</p><p class="mt"><a href="${CHANGE_USERNAME}">Change username</a></p></div>
 <div class="card"><span class="tag">Security</span><h3>${esc(mfaHeadline(session))}</h3><p><a href="/account/2fa">Two-factor authentication</a></p></div>
+${await socialCard(env, session)}
 </div>
 <p class="mt btn-row"><a class="btn btn-primary" href="${PANEL_SIGN_IN}">Open the panel</a>
 <a class="btn btn-ghost" href="/account/2fa">Two-factor authentication</a>
@@ -488,11 +557,22 @@ export async function handleAuth(request, env) {
     return new Response(null, { status: 302, headers: { Location: `/auth/login?sync=1&next=${encodeURIComponent("/account")}`, "Cache-Control": "no-store" } });
   }
 
+  if (url.pathname === "/account/unlink" && request.method === "POST") {
+    const session = await getSession(request, env);
+    if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account", "Cache-Control": "no-store" } });
+    // Only from this site's own account page.
+    const origin = request.headers.get("Origin");
+    if (origin && new URL(origin).host !== url.host) return new Response("Forbidden.", { status: 403 });
+    const slug = String((await request.formData()).get("source") ?? "").toLowerCase();
+    const outcome = socialSources(env).includes(slug) ? await unlinkSource(env, session, slug) : "failed";
+    return new Response(null, { status: 303, headers: { Location: `/account?link=${outcome === "unlinked" ? "unlinked" : "unlink-failed"}`, "Cache-Control": "no-store" } });
+  }
+
   if (url.pathname === "/account" && request.method === "GET") {
     const session = await getSession(request, env);
     if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account", "Cache-Control": "no-store" } });
     if (dueForRecheck(session)) return recheckRedirect("/account");
-    return accountPage(session, url.searchParams.get("panel"));
+    return accountPage(env, session, url.searchParams.get("panel"), url.searchParams.get("link"));
   }
 
   return new Response("Not found.", { status: 404 });
