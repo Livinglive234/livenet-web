@@ -25,7 +25,7 @@
     "OIDC_MFA_SCOPE": "livenet_mfa",
     // Social sign-in sources linked from /account (see docs/signin.md). Slugs of the sources that exist in
     // Authentik, from: google, discord, github. Empty hides the section.
-    "SOCIAL_SOURCES": ""
+    "SOCIAL_SOURCES": "google,discord,github"
   },
 
   // Beta requests. The id is an identifier, not a secret: using the namespace needs
