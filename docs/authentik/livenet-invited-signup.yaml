@@ -1,0 +1,190 @@
+# LiveNet's own signup flow, for people who were invited (or whose old panel account is being moved over).
+# Import as a blueprint (see docs/signin.md, "Invited signup").
+#
+# The invitation email links here with "?email=<their address>". This flow:
+#   - prefills the Email field with that address,
+#   - refuses a different address when the link carries one (the panel matches accounts by email, so a
+#     different address would not get their servers),
+#   - refuses an address another LiveNet account already uses,
+#   - asks for a username (lowercase, for SFTP) and a password (at least 10 characters),
+#   - sends the usual confirmation email, then signs the person in.
+#
+# After importing, bind your Captcha stage to this flow at order 5 (Flows > livenet-invited-signup > Stage
+# Bindings), like on the default enrollment flow. The user-write, email and login stages are shared with
+# default-enrollment-flow, so changes to those apply to both.
+version: 1
+metadata:
+  name: LiveNet - Invited signup
+entries:
+  - model: authentik_flows.flow
+    id: invite-flow
+    identifiers:
+      slug: livenet-invited-signup
+    attrs:
+      name: LiveNet invited signup
+      title: Create your LiveNet account
+      designation: enrollment
+      authentication: none
+
+  - model: authentik_policies_expression.expressionpolicy
+    id: invite-username-policy
+    identifiers:
+      name: livenet-invited-signup-username
+    attrs:
+      expression: |
+        import re
+        username = (request.context.get("prompt_data") or {}).get("username", "")
+        # Lowercase letters, digits, dot, dash and underscore; starts and ends with a letter or digit.
+        # (The panel looks usernames up in lowercase, so capitals would break SFTP.)
+        if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]{1,30}[a-z0-9]", username):
+            ak_message("Usernames are 3 to 32 characters: lowercase letters, numbers, dots, dashes and underscores. They must start and end with a letter or number.")
+            return False
+        return True
+
+  - model: authentik_policies_expression.expressionpolicy
+    id: invite-email-policy
+    identifiers:
+      name: livenet-invited-signup-email
+    attrs:
+      expression: |
+        from urllib.parse import parse_qs
+        from authentik.core.models import User
+
+        email = ((request.context.get("prompt_data") or {}).get("email") or "").strip().lower()
+        if not email:
+            return False
+
+        # The address from the invitation link, if there is one.
+        invited = ""
+        try:
+            http = request.http_request
+            stored = http.session.get("authentik/flows/get") or {}
+            invited = str(stored.get("email", "") or "")
+            if not invited:
+                invited = (parse_qs(http.GET.get("query", "")).get("email") or [""])[0]
+        except Exception:
+            invited = ""
+        invited = invited.strip().lower()
+
+        if invited and email != invited:
+            ak_message("This invitation is for " + invited + ". Please use that email address.")
+            return False
+        if User.objects.filter(email__iexact=email).exists():
+            ak_message("A LiveNet account with that email address already exists. Sign in instead.")
+            return False
+        return True
+
+  - model: authentik_policies_expression.expressionpolicy
+    id: invite-password-policy
+    identifiers:
+      name: livenet-invited-signup-password
+    attrs:
+      expression: |
+        data = request.context.get("prompt_data") or {}
+        password = data.get("password", "")
+        if len(password) < 10:
+            ak_message("Use at least 10 characters.")
+            return False
+        username = (data.get("username") or "").lower()
+        email = (data.get("email") or "").lower()
+        if password.lower() in (username, email):
+            ak_message("Your password can't be your username or email.")
+            return False
+        return True
+
+  - model: authentik_stages_prompt.prompt
+    id: invite-username-field
+    identifiers:
+      name: livenet-invited-signup-field-username
+    attrs:
+      field_key: username
+      label: Username
+      type: username
+      required: true
+      placeholder: Choose a username
+      placeholder_expression: false
+      order: 100
+
+  # Prefilled from the "?email=" in the invitation link. If it can't be read, the field is simply empty.
+  - model: authentik_stages_prompt.prompt
+    id: invite-email-field
+    identifiers:
+      name: livenet-invited-signup-field-email
+    attrs:
+      field_key: email
+      label: Email
+      type: email
+      required: true
+      placeholder: you@example.com
+      placeholder_expression: false
+      order: 101
+      initial_value: |
+        from urllib.parse import parse_qs
+        try:
+            stored = request.session.get("authentik/flows/get") or {}
+            value = str(stored.get("email", "") or "")
+            if not value:
+                value = (parse_qs(request.GET.get("query", "")).get("email") or [""])[0]
+            return value.strip()[:200]
+        except Exception:
+            return ""
+      initial_value_expression: true
+
+  - model: authentik_stages_prompt.prompt
+    id: invite-password-field
+    identifiers:
+      name: livenet-invited-signup-field-password
+    attrs:
+      field_key: password
+      label: Password
+      type: password
+      required: true
+      placeholder: Password
+      placeholder_expression: false
+      order: 102
+
+  - model: authentik_stages_prompt.prompt
+    id: invite-password-repeat-field
+    identifiers:
+      name: livenet-invited-signup-field-password-repeat
+    attrs:
+      field_key: password_repeat
+      label: Password (repeat)
+      type: password
+      required: true
+      placeholder: Repeat the password
+      placeholder_expression: false
+      order: 103
+
+  - model: authentik_stages_prompt.promptstage
+    id: invite-prompt
+    identifiers:
+      name: livenet-invited-signup-prompt
+    attrs:
+      fields:
+        - !KeyOf invite-username-field
+        - !KeyOf invite-email-field
+        - !KeyOf invite-password-field
+        - !KeyOf invite-password-repeat-field
+      validation_policies:
+        - !KeyOf invite-username-policy
+        - !KeyOf invite-email-policy
+        - !KeyOf invite-password-policy
+
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 10, stage: !KeyOf invite-prompt, target: !KeyOf invite-flow}
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      order: 20
+      stage: !Find [authentik_stages_user_write.userwritestage, [name, default-enrollment-user-write]]
+      target: !KeyOf invite-flow
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      order: 30
+      stage: !Find [authentik_stages_email.emailstage, [name, default-enrollment-email-verification]]
+      target: !KeyOf invite-flow
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      order: 100
+      stage: !Find [authentik_stages_user_login.userloginstage, [name, default-enrollment-user-login]]
+      target: !KeyOf invite-flow

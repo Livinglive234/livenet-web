@@ -199,3 +199,14 @@ A Cloudflare Turnstile check on the login, "forgot password" and signup pages st
 4. For `default-enrollment-flow`, open its Stage Bindings tab and bind the same stage at an order below the first stage (the first prompt is order 10, so use 5).
 
 The secret only ever goes into Authentik, never into this repo.
+
+## Invited signup
+
+People invited to a server (and old panel accounts being moved over) get an email whose "Create your LiveNet account" link carries `?email=<their address>`. LiveNet's own signup flow, `livenet-invited-signup`, prefills that address, refuses a different one (the panel matches accounts by email, so another address wouldn't get their servers), refuses an address another account already uses, and then does the usual username, password and email confirmation.
+
+1. Copy `docs/authentik/livenet-invited-signup.yaml` into `/opt/authentik/blueprints/` and check Flows shows `livenet-invited-signup`.
+2. Bind your Captcha stage to it at order 5 (Flows > livenet-invited-signup > Stage Bindings > Bind existing stage), as on `default-enrollment-flow`.
+3. In the panel, go to Admin > Plugins > LiveNet Auth > Settings and set the signup link to `https://auth.livenet.host/if/flow/livenet-invited-signup/`.
+4. Test with `https://auth.livenet.host/if/flow/livenet-invited-signup/?email=you@example.com`: the Email field should already be filled in, and a different address should be refused.
+
+The flow shares its user-write, email-confirmation and login stages with `default-enrollment-flow`. If the address can't be read from the link (for example after an Authentik update changes how flows remember it), the Email field is simply empty, as it is today, and signup still works.
