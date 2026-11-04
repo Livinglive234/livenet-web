@@ -105,7 +105,7 @@ async function handleBeta(request, env) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const { pathname } = new URL(request.url);
 
     if (pathname === "/api/beta") {
@@ -113,7 +113,7 @@ export default {
       return handleBeta(request, env);
     }
 
-    if (pathname === "/api/comments" || pathname === "/api/comments/delete") return handleComments(request, env);
+    if (pathname === "/api/comments" || pathname === "/api/comments/delete") return handleComments(request, env, ctx);
 
     if (pathname === "/admin" || pathname.startsWith("/admin/")) return handleAdmin(request, env);
 

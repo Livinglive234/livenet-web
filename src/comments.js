@@ -18,7 +18,7 @@ const json = (body, status = 200) =>
 
 const clean = (text) => String(text ?? "").replace(/\r\n?/g, "\n").replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/g, "").trim();
 
-export async function handleComments(request, env) {
+export async function handleComments(request, env, ctx) {
   if (!env.BETA_REQUESTS) return json({ error: "Comments aren't set up yet." }, 503);
 
   const url = new URL(request.url);
@@ -88,5 +88,22 @@ export async function handleComments(request, env) {
     JSON.stringify({ id, slug, sub: session.sub, user, name, body, created }),
     { metadata: { u: user, n: name.slice(0, 40), c: created, s: body.slice(0, 120) } },
   );
+
+  // A ping in Discord for each new comment. DISCORD_COMMENTS_WEBHOOK, or the beta requests' DISCORD_WEBHOOK if
+  // that is not set. A failure here never stops the comment from being saved.
+  const webhook = env.DISCORD_COMMENTS_WEBHOOK || env.DISCORD_WEBHOOK;
+  if (webhook) {
+    const notify = fetch(webhook, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        content: `**New comment** on "${post.title}"\n**Who:** ${name} (@${user})\n**Link:** https://${url.host}/blog/${slug}#comments\n${body.split("\n").map((line) => `> ${line}`).join("\n")}`.slice(0, 1900),
+        allowed_mentions: { parse: [] },
+      }),
+    }).catch(() => {});
+    if (ctx?.waitUntil) ctx.waitUntil(notify);
+    else await notify;
+  }
+
   return json({ ok: true });
 }

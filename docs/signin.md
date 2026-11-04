@@ -185,3 +185,17 @@ Authentik chooses the passwordless link's text, but the brand's **Custom CSS** c
 ```
 
 The button keeps its own size (so it matches the Log in button) and the new text is drawn centered over it. This is a visual swap only. The link still goes to `livenet-passkey-signin`.
+
+## Turnstile on the Authentik sign-in pages
+
+A Cloudflare Turnstile check on the login, "forgot password" and signup pages stops scripts from guessing passwords or making Authentik send emails to strangers. Social and passkey sign-in skip it (they aren't guessable).
+
+1. In Cloudflare, go to Turnstile > Add widget for `auth.livenet.host`. Use a separate widget from the website's beta form. Copy the site key and secret.
+2. In Authentik, go to Flows and Stages > Stages > Create > **Captcha Stage**:
+   - Public key: the site key. Private key: the secret.
+   - JS URL: `https://challenges.cloudflare.com/turnstile/v0/api.js`
+   - API URL: `https://challenges.cloudflare.com/turnstile/v0/siteverify`
+3. Set it as the **Captcha stage** on the identification stage of `default-authentication-flow` and of `default-recovery-flow`.
+4. For `default-enrollment-flow`, open its Stage Bindings tab and bind the same stage at an order below the first stage (the first prompt is order 10, so use 5).
+
+The secret only ever goes into Authentik, never into this repo.
