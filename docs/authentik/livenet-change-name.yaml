@@ -1,0 +1,95 @@
+# A flow that lets a signed-in person change their display name (not their username). Import as a
+# blueprint (see docs/signin.md, "Changing a name").
+#
+#   livenet-change-name   asks for the new name and saves it. Names that look official (staff, admin,
+#                         livenet and similar) are refused, except for Authentik superusers.
+#
+# It finishes by sending the person to https://livenet.host/account/sync, which refreshes the site's
+# copy of their details.
+version: 1
+metadata:
+  name: LiveNet - Change name
+entries:
+  - model: authentik_flows.flow
+    id: name-flow
+    identifiers:
+      slug: livenet-change-name
+    attrs:
+      name: LiveNet change name
+      title: Change your name
+      designation: stage_configuration
+      authentication: require_authenticated
+
+  - model: authentik_policies_expression.expressionpolicy
+    id: name-policy
+    identifiers:
+      name: livenet-change-name-check
+    attrs:
+      expression: |
+        import re
+        name = ((request.context.get("prompt_data") or {}).get("name") or "").strip()
+        if not 1 <= len(name) <= 100:
+            ak_message("Your name must be between 1 and 100 characters.")
+            return False
+        # Superusers (the people who run LiveNet) can use any name.
+        if request.user.is_superuser:
+            return True
+        reserved = {"admin", "administrator", "staff", "mod", "moderator", "livenet", "support", "owner", "system", "root", "official", "team"}
+        words = set(re.findall(r"[a-z0-9]+", name.lower()))
+        squashed = re.sub(r"[^a-z0-9]", "", name.lower())
+        if words & reserved or squashed in reserved:
+            ak_message("That name looks like an official LiveNet name. Please pick another.")
+            return False
+        return True
+
+  - model: authentik_stages_prompt.prompt
+    id: name-field
+    identifiers:
+      name: livenet-change-name-field
+    attrs:
+      field_key: name
+      label: Your name
+      type: text
+      required: true
+      placeholder: Your name
+      placeholder_expression: false
+      order: 100
+      initial_value: |
+        try:
+            return user.name
+        except:
+            return ''
+      initial_value_expression: true
+
+  - model: authentik_stages_prompt.promptstage
+    id: name-prompt
+    identifiers:
+      name: livenet-change-name-prompt
+    attrs:
+      fields:
+        - !KeyOf name-field
+      validation_policies:
+        - !KeyOf name-policy
+
+  - model: authentik_stages_user_write.userwritestage
+    id: name-write
+    identifiers:
+      name: livenet-change-name-write
+    attrs:
+      user_creation_mode: never_create
+
+  - model: authentik_stages_redirect.redirectstage
+    id: name-redirect
+    identifiers:
+      name: livenet-change-name-redirect
+    attrs:
+      mode: static
+      target_static: https://livenet.host/account/sync
+      keep_context: false
+
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 10, stage: !KeyOf name-prompt, target: !KeyOf name-flow}
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 20, stage: !KeyOf name-write, target: !KeyOf name-flow}
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 30, stage: !KeyOf name-redirect, target: !KeyOf name-flow}

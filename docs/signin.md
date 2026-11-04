@@ -142,3 +142,7 @@ The email uses Authentik's `email/password_reset.html` template and the email se
 ### Locking the easy way around it
 
 Authentik's own `default-password-change` and `default-user-settings-flow` flows change a password, username or email with no current password and no email confirmation, and anyone signed in can open them by typing the address. Import `docs/authentik/livenet-lock-default-flows.yaml` the same way to deny them. Also turn off **Allow users to change email / username / name** in Authentik's admin Settings, so the user-settings flow can't be used either. The email-confirmed recovery flow (`default-recovery-flow`, "Forgot password?") is left alone.
+
+## Changing a name
+
+The Name card on `/account` has a **Change name** link to the `livenet-change-name` flow. Import `docs/authentik/livenet-change-name.yaml` the same way as the other blueprints. Names that look official (staff, admin, livenet and similar words) are refused, except for Authentik superusers, so you can still use any name yourself. To change the reserved words, edit the `reserved` list in the blueprint.
