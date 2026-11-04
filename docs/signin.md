@@ -149,7 +149,7 @@ The Name card on `/account` has a **Change name** link to the `livenet-change-na
 
 ## Passkeys
 
-People add a passkey from the **Add a passkey** link on `/account`, then sign in with it from the username field's autofill on the sign-in page (no username or password needed).
+People add (and remove) passkeys on the **Passkeys** page, linked from `/account`, then sign in with it from the username field's autofill on the sign-in page (no username or password needed).
 
 1. Copy `docs/authentik/livenet-passkeys.yaml` into `/opt/authentik/blueprints/`.
 2. In Authentik, open the `default-authentication-flow`'s identification stage and set **WebAuthn Authenticator Validation Stage** to `livenet-passkey-validate`.
@@ -158,3 +158,7 @@ People add a passkey from the **Add a passkey** link on `/account`, then sign in
 Authentik's default sign-in flow skips the second-factor step after a passkey sign-in, since a passkey is already two factors (the device and a fingerprint, face or PIN). To still ask for a second factor, adjust the expression policy on the MFA stage in that flow.
 
 The passkey is tied to `auth.livenet.host`, so it works for the website and the panel alike (both sign in through Authentik). The panel's own passkey buttons stay hidden.
+
+### Listing and removing passkeys
+
+The Passkeys page lists a person's passkeys and has a Remove button, using the same `AUTHENTIK_API_TOKEN` as the linked accounts. Add two more global permissions to the `livenet-site-links` role in Authentik (Directory > Roles): `authentik_stages_authenticator_webauthn | WebAuthn Device | Can view WebAuthn Device` and `... | Can delete WebAuthn Device`. Without them the page says it couldn't check the passkeys, and Remove does nothing.

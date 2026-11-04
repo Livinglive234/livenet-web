@@ -162,21 +162,27 @@ const LINK_NOTICES = {
 const socialSources = (env) => String(env.SOCIAL_SOURCES ?? "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => SOCIAL_NAMES[x]);
 const authentikBase = (env) => new URL(env.OIDC_ISSUER).origin;
 
+const authentikHeaders = (env) => ({ Authorization: `Bearer ${env.AUTHENTIK_API_TOKEN}`, Accept: "application/json" });
+
+// The person's Authentik user, or null. Exact username only, and the email must agree with the session too.
+async function authentikUser(env, session) {
+  if (!env.AUTHENTIK_API_TOKEN || !session.username) return null;
+  const users = await fetch(`${authentikBase(env)}/api/v3/core/users/?username=${encodeURIComponent(session.username)}`, { headers: authentikHeaders(env) });
+  if (!users.ok) return null;
+  const user = ((await users.json()).results ?? []).find((u) => String(u.username).toLowerCase() === session.username.toLowerCase());
+  if (!user) return null;
+  if (session.email && user.email && String(user.email).toLowerCase() !== session.email.toLowerCase()) return null;
+  return user;
+}
+
 // Looks up the person's Authentik user and their linked sign-ins. Returns
 // { links: { slug: connectionId } }, or { error } when it can't be checked.
 async function linkedSources(env, session) {
   if (!env.AUTHENTIK_API_TOKEN || !session.username) return { error: "not-configured" };
-  const headers = { Authorization: `Bearer ${env.AUTHENTIK_API_TOKEN}`, Accept: "application/json" };
-  const base = authentikBase(env);
   try {
-    const users = await fetch(`${base}/api/v3/core/users/?username=${encodeURIComponent(session.username)}`, { headers });
-    if (!users.ok) return { error: "failed" };
-    // Exact username only, and the email must agree with the session too.
-    const user = ((await users.json()).results ?? []).find((u) => String(u.username).toLowerCase() === session.username.toLowerCase());
+    const user = await authentikUser(env, session);
     if (!user) return { error: "failed" };
-    if (session.email && user.email && String(user.email).toLowerCase() !== session.email.toLowerCase()) return { error: "failed" };
-
-    const response = await fetch(`${base}/api/v3/sources/user_connections/all/?user=${user.pk}&page_size=100`, { headers });
+    const response = await fetch(`${authentikBase(env)}/api/v3/sources/user_connections/all/?user=${user.pk}&page_size=100`, { headers: authentikHeaders(env) });
     if (!response.ok) return { error: "failed" };
     const links = {};
     for (const c of (await response.json()).results ?? []) {
@@ -186,6 +192,35 @@ async function linkedSources(env, session) {
     return { links };
   } catch {
     return { error: "failed" };
+  }
+}
+
+// The person's passkeys: { devices: [{ pk, name, created }] } or { error }. The list endpoint can't filter
+// by user, so ask for a big page and keep this person's.
+async function passkeysFor(env, session) {
+  if (!env.AUTHENTIK_API_TOKEN) return { error: "not-configured" };
+  try {
+    const user = await authentikUser(env, session);
+    if (!user) return { error: "failed" };
+    const response = await fetch(`${authentikBase(env)}/api/v3/authenticators/admin/webauthn/?page_size=500`, { headers: authentikHeaders(env) });
+    if (!response.ok) return { error: "failed" };
+    const devices = ((await response.json()).results ?? [])
+      .filter((d) => Number(d.user?.pk ?? d.user) === Number(user.pk))
+      .map((d) => ({ pk: d.pk, name: d.name, created: d.created_on }));
+    return { devices };
+  } catch {
+    return { error: "failed" };
+  }
+}
+
+async function removePasskey(env, session, pk) {
+  const found = await passkeysFor(env, session);
+  if (!found.devices || !found.devices.some((d) => String(d.pk) === String(pk))) return "failed";
+  try {
+    const response = await fetch(`${authentikBase(env)}/api/v3/authenticators/admin/webauthn/${encodeURIComponent(pk)}/`, { method: "DELETE", headers: authentikHeaders(env) });
+    return response.ok ? "removed" : "failed";
+  } catch {
+    return "failed";
   }
 }
 
@@ -220,6 +255,25 @@ async function connectionsPage(env, session, link = null) {
 <section><div class="wrap"><div class="card">${warning}<ul class="plain">${rows}</ul></div>
 <p class="mt">Just linked something? <a href="/account/connections">Refresh this page</a>.</p></div></section>`;
   return html(shell({ title: "Linked accounts — LiveNet", body }));
+}
+
+const PASSKEY_NOTICES = {
+  removed: ["ok", "That passkey has been removed."],
+  "remove-failed": ["err", "Couldn't remove that passkey. Please try again."],
+};
+
+async function passkeysPage(env, session, notice = null) {
+  const found = await passkeysFor(env, session);
+  const [noticeKind, noticeText] = PASSKEY_NOTICES[notice] ?? [];
+  const status = noticeText ? `<p class="status ${noticeKind}" role="status">${esc(noticeText)}</p>` : "";
+  const warning = found.error === "failed" ? `<p class="status err" role="status">Couldn't check your passkeys right now.</p>` : "";
+  const date = (value) => (value ? new Date(value).toISOString().slice(0, 10) : "");
+  const rows = (found.devices ?? []).map((d) => `<li><strong>${esc(d.name || "Passkey")}</strong> ${d.created ? `added ${esc(date(d.created))}` : ""} <form method="post" action="/account/passkeys/remove" class="inline"><input type="hidden" name="id" value="${esc(String(d.pk))}"><button class="btn btn-ghost" type="submit">Remove</button></form></li>`).join("");
+  const list = found.devices ? (rows ? `<ul class="plain">${rows}</ul>` : "<p>You haven't added a passkey yet.</p>") : "";
+  const body = `<div class="wrap page-title"><p><a class="btn btn-ghost" href="/account">← Back to your account</a></p><h1>Passkeys</h1><p class="lead">Sign in with your fingerprint, face or device PIN instead of a password. A passkey works on this site and in the panel.</p>${status}</div>
+<section><div class="wrap"><div class="card"><span class="tag">Your passkeys</span>${warning}${list}<p class="mt"><a class="btn btn-primary" href="${ADD_PASSKEY}">Add a passkey</a></p></div>
+<p class="mt">Just added one? <a href="/account/passkeys">Refresh this page</a>.</p></div></section>`;
+  return html(shell({ title: "Passkeys — LiveNet", body }));
 }
 
 // ---- Back-channel logout ---------------------------------------------------
@@ -314,7 +368,7 @@ async function accountPage(env, session, panel = null) {
 <section><div class="wrap"><div class="grid">
 <div class="card"><span class="tag">Name</span><h3>${esc(session.name || session.username)}</h3><p>${esc(session.email)}</p><p class="mt"><a href="${CHANGE_NAME}">Change name</a> · <a href="${CHANGE_EMAIL}">Change email</a></p></div>
 <div class="card"><span class="tag">Username</span><h3>${esc(session.username)}</h3><p>Use this to sign in everywhere on LiveNet.</p><p class="mt"><a href="${CHANGE_USERNAME}">Change username</a></p></div>
-<div class="card"><span class="tag">Security</span><h3>${esc(mfaHeadline(session))}</h3><p><a href="/account/2fa">Two-factor authentication</a></p><p class="mt"><a href="${CHANGE_PASSWORD}">Change password</a> · <a href="${ADD_PASSKEY}">Add a passkey</a></p></div>
+<div class="card"><span class="tag">Security</span><h3>${esc(mfaHeadline(session))}</h3><p><a href="/account/2fa">Two-factor authentication</a></p><p class="mt"><a href="${CHANGE_PASSWORD}">Change password</a> · <a href="/account/passkeys">Passkeys</a></p></div>
 ${socialSources(env).length ? `<div class="card"><span class="tag">Sign-in options</span><h3>Linked accounts</h3><p>Sign in with Google, Discord or GitHub.</p><p class="mt"><a href="/account/connections">Manage linked accounts</a></p></div>` : ""}
 </div>
 <p class="mt btn-row"><a class="btn btn-primary" href="${PANEL_SIGN_IN}">Open the panel</a>
@@ -564,6 +618,22 @@ export async function handleAuth(request, env) {
     if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account", "Cache-Control": "no-store" } });
     // A quiet sign-in refreshes the details from Authentik; the callback then updates the panel.
     return new Response(null, { status: 302, headers: { Location: `/auth/login?sync=1&next=${encodeURIComponent("/account")}`, "Cache-Control": "no-store" } });
+  }
+
+  if (url.pathname === "/account/passkeys" && request.method === "GET") {
+    const session = await getSession(request, env);
+    if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account/passkeys", "Cache-Control": "no-store" } });
+    if (dueForRecheck(session)) return recheckRedirect("/account/passkeys");
+    return passkeysPage(env, session, url.searchParams.get("passkey"));
+  }
+
+  if (url.pathname === "/account/passkeys/remove" && request.method === "POST") {
+    const session = await getSession(request, env);
+    if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account/passkeys", "Cache-Control": "no-store" } });
+    const origin = request.headers.get("Origin");
+    if (origin && new URL(origin).host !== url.host) return new Response("Forbidden.", { status: 403 });
+    const outcome = await removePasskey(env, session, String((await request.formData()).get("id") ?? ""));
+    return new Response(null, { status: 303, headers: { Location: `/account/passkeys?passkey=${outcome === "removed" ? "removed" : "remove-failed"}`, "Cache-Control": "no-store" } });
   }
 
   if (url.pathname === "/account/connections" && request.method === "GET") {
