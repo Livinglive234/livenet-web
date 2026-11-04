@@ -163,3 +163,23 @@ The passkey is tied to `auth.livenet.host`, so it works for the website and the 
 ### Listing and removing passkeys
 
 The Passkeys page lists a person's passkeys and has a Remove button, using the same `AUTHENTIK_API_TOKEN` as the linked accounts. Add two more global permissions to the `livenet-site-links` role in Authentik (Directory > Roles): `authentik_stages_authenticator_webauthn | WebAuthn Device | Can view WebAuthn Device` and `... | Can delete WebAuthn Device`. Without them the page says it couldn't check the passkeys, and Remove does nothing.
+
+### Renaming the "Use a security key" link
+
+Authentik chooses the passwordless link's text, but the brand's **Custom CSS** can replace it. In Authentik: System > Brands > edit the brand > **Custom CSS**, and add this at the end (keep what is already there):
+
+```css
+[data-ouia-component-id="passwordless"] {
+  font-size: 0 !important;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  min-height: 2.25rem;
+}
+[data-ouia-component-id="passwordless"]::after {
+  content: "Passkey Login";
+  font-size: var(--pf-global--FontSize--md, 1rem);
+}
+```
+
+This is a visual swap only. The link still goes to `livenet-passkey-signin`.
