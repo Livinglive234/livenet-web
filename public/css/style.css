@@ -96,7 +96,8 @@ nav a:hover, nav a[aria-current="page"] { color: var(--text); text-decoration: n
 
 /* Buttons */
 .btn {
-  display: inline-block; padding: 0.625rem 1.125rem; border-radius: var(--r-control);
+  display: inline-flex; align-items: center; justify-content: center; text-align: center;
+  padding: 0.625rem 1.125rem; border-radius: var(--r-control);
   min-height: 2.75rem; font-weight: 600; font-size: 0.9375rem; border: 1px solid transparent;
   cursor: pointer; font-family: inherit; line-height: 1.5;
 }
