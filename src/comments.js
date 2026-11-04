@@ -34,7 +34,8 @@ export async function handleComments(request, env) {
       id: c.id, user: c.user, name: c.name, body: c.body, created: c.created,
       mine: Boolean(session && c.sub === session.sub),
     }));
-    return json({ comments, me: session ? { user: session.username, name: session.name || session.username } : null });
+    const post = await getPost(env, slug);
+    return json({ comments, closed: Boolean(post?.commentsOff), me: session ? { user: session.username, name: session.name || session.username } : null });
   }
 
   if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
@@ -67,6 +68,7 @@ export async function handleComments(request, env) {
 
   const post = await getPost(env, slug);
   if (!post || !post.published) return json({ error: "Unknown post." }, 404);
+  if (post.commentsOff) return json({ error: "Comments are turned off for this post." }, 403);
 
   const body = clean(data.body);
   if (!body) return json({ error: "Write something first." }, 400);

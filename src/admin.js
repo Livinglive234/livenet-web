@@ -191,7 +191,7 @@ function confirmRequestPage(email, entry) {
 }
 
 function editorPage(email, post, error = "") {
-  const p = { title: "", slug: "", summary: "", body: "", published: false, ...post };
+  const p = { title: "", slug: "", summary: "", body: "", published: false, commentsOff: false, ...post };
   const existing = Boolean(post?.original ?? post?.created);
   const original = post?.original ?? post?.slug ?? "";
   const remove = existing && original
@@ -205,6 +205,7 @@ function editorPage(email, post, error = "") {
 <label>Summary <small>Shown on the blog list and in search results.</small><input name="summary" maxlength="200" value="${esc(p.summary)}"></label>
 <label>Post <small>Markdown: # headings, **bold**, *italic*, [links](https://example.com), - lists, &gt; quotes, \`code\`. HTML is not allowed.</small><textarea name="body" required maxlength="50000">${esc(p.body)}</textarea></label>
 <label class="check"><input type="checkbox" name="published"${p.published ? " checked" : ""}> Published (uncheck to keep as a draft)</label>
+<label class="check"><input type="checkbox" name="comments"${p.commentsOff ? "" : " checked"}> Allow new comments (existing comments stay visible)</label>
 <div class="btn-row"><button class="btn btn-primary" type="submit">Save post</button><a class="btn btn-ghost" href="/admin#blog">Cancel</a></div>
 </form>${remove}</section>`);
 }
@@ -273,6 +274,7 @@ export async function handleAdmin(request, env) {
         summary: clip(form.get("summary"), 200),
         body: clip(form.get("body"), 50000),
         published: form.get("published") === "on",
+        commentsOff: form.get("comments") !== "on",
         slug: clip(form.get("slug"), 80).toLowerCase(),
         original,
       };

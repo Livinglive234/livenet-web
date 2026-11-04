@@ -25,7 +25,8 @@ if (box) {
     }
 
     list.replaceChildren(...(data.comments.length ? data.comments.map(render) : [element("p", "", "No comments yet.")]));
-    showForm(data.me);
+    if (data.closed) formBox.replaceChildren(element("p", "", "Comments are turned off for this post."));
+    else showForm(data.me);
   }
 
   function render(comment) {
