@@ -7,6 +7,7 @@
 #   default-source-enrollment                             creating a new account from a Google, Discord or
 #                                                         GitHub sign-in (accounts are only ever LINKED)
 #   initial-setup, default-request                        first-run admin setup, and access requests
+#   default-enrollment-flow                               the old signup flow, replaced by livenet-invited-signup
 #
 # Anyone who opens these flows directly (even by typing the address) gets "Access denied". Admins
 # can still change a user from the Authentik admin interface. Import as a blueprint (see docs/signin.md).
@@ -96,6 +97,27 @@ entries:
     identifiers:
       target: !Find [authentik_flows.flow, [slug, default-request]]
       policy: !KeyOf deny-generic
+      order: 0
+    attrs:
+      negate: false
+      enabled: true
+      timeout: 30
+
+  # The old signup flow, replaced by livenet-invited-signup. Make sure the identification stage's
+  # "Enrollment flow" points at the new one BEFORE importing this, or the "Sign up" link is denied too.
+  - model: authentik_policies_expression.expressionpolicy
+    id: deny-old-signup
+    identifiers:
+      name: livenet-deny-old-signup
+    attrs:
+      expression: |
+        ak_message("This signup link is out of date. Go to auth.livenet.host and choose Sign up there.")
+        return False
+
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !Find [authentik_flows.flow, [slug, default-enrollment-flow]]
+      policy: !KeyOf deny-old-signup
       order: 0
     attrs:
       negate: false

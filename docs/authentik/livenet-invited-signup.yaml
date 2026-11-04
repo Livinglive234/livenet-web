@@ -6,7 +6,8 @@
 #   - refuses a different address when the link carries one (the panel matches accounts by email, so a
 #     different address would not get their servers),
 #   - refuses an address another LiveNet account already uses,
-#   - asks for a username (lowercase, for SFTP), an optional name and a password (at least 10 characters),
+#   - asks for a username (lowercase, for SFTP), an optional name and a password (at least 10 characters, and
+#     not found in a known data breach),
 #   - sends the usual confirmation email, then signs the person in.
 #
 # After importing, bind your Captcha stage to this flow at order 5 (Flows > livenet-invited-signup > Stage
@@ -114,6 +115,21 @@ entries:
             return False
         return True
 
+  # Refuses a password that has appeared in a known data breach (checked against Have I Been Pwned, which is
+  # free and never sees the password: only the first five characters of its hash are sent).
+  - model: authentik_policies_password.passwordpolicy
+    id: invite-breach-policy
+    identifiers:
+      name: livenet-invited-signup-breach
+    attrs:
+      password_field: password
+      check_static_rules: true
+      length_min: 10
+      check_have_i_been_pwned: true
+      hibp_allowed_count: 0
+      check_zxcvbn: false
+      error_message: That password is too short or has appeared in a data breach. Please choose another.
+
   - model: authentik_stages_prompt.prompt
     id: invite-username-field
     identifiers:
@@ -209,6 +225,7 @@ entries:
         - !KeyOf invite-name-policy
         - !KeyOf invite-email-policy
         - !KeyOf invite-password-policy
+        - !KeyOf invite-breach-policy
 
   - model: authentik_flows.flowstagebinding
     identifiers: {order: 10, stage: !KeyOf invite-prompt, target: !KeyOf invite-flow}

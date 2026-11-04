@@ -210,3 +210,13 @@ People invited to a server (and old panel accounts being moved over) get an emai
 4. Test with `https://auth.livenet.host/if/flow/livenet-invited-signup/?email=you@example.com`: the Email field should already be filled in, and a different address should be refused.
 
 The flow shares its user-write, email-confirmation and login stages with `default-enrollment-flow`. If the address can't be read from the link (for example after an Authentik update changes how flows remember it), the Email field is simply empty, as it is today, and signup still works.
+
+## Breach-checked passwords, and locking the old signup flow
+
+New passwords (at signup and on the Change password flow) must be at least 10 characters and must not appear in a known data breach. The check uses Have I Been Pwned's free range API: only the first five characters of the password's hash are sent, never the password. If that service can't be reached, Authentik decides how to handle it, so a short outage may let a password through.
+
+To retire the old signup flow:
+1. Set the identification stage's **Enrollment flow** (on `default-authentication-flow`) to `livenet-invited-signup`, so the "Sign up" link goes to the new flow.
+2. Then copy the updated `livenet-lock-default-flows.yaml` into the blueprints folder. Anyone opening the old `default-enrollment-flow` address (an old email, a bookmark) now sees "This signup link is out of date. Go to auth.livenet.host and choose Sign up there."
+
+The new flow shares stages with the old one, so locking the old flow doesn't affect it.
