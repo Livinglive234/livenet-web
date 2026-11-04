@@ -233,7 +233,7 @@ entries:
       placeholder: >-
         <a href="https://livenet.host/terms/" target="_blank" rel="noopener">Terms of Service</a> and
         <a href="https://livenet.host/privacy/" target="_blank" rel="noopener">Privacy Policy</a>.
-        You must be 13 or older to have an account. LiveNet Server Hosting requires you to be 18 or older.
+        You must be 13 or older to have an account. Creating or owning a hosted server requires you to be 18 or older.
       placeholder_expression: false
       order: 105
 
