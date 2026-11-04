@@ -98,6 +98,8 @@ export function shell({ title, description = "", body, current = "" }) {
     <div class="wrap">
       <span>© 2026 LiveNet. Run by Livinglive234.</span>
       <div class="links">
+        <a href="/terms/">Terms</a>
+        <a href="/privacy/">Privacy</a>
         <a href="https://twitch.tv/Livinglive234" rel="noopener">Twitch</a>
         <a href="https://github.com/Livinglive234" rel="noopener">GitHub</a>
         <a href="https://youtube.com/@Livinglive234" rel="noopener">YouTube</a>
