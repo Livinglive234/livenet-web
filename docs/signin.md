@@ -170,16 +170,18 @@ Authentik chooses the passwordless link's text, but the brand's **Custom CSS** c
 
 ```css
 [data-ouia-component-id="passwordless"] {
-  font-size: 0 !important;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-  min-height: 2.25rem;
+  position: relative;
+  color: transparent !important;
 }
 [data-ouia-component-id="passwordless"]::after {
   content: "Passkey Login";
-  font-size: var(--pf-global--FontSize--md, 1rem);
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--pf-c-button--m-secondary--Color, var(--pf-global--link--Color, #73bcf7));
 }
 ```
 
-This is a visual swap only. The link still goes to `livenet-passkey-signin`.
+The button keeps its own size (so it matches the Log in button) and the new text is drawn centered over it. This is a visual swap only. The link still goes to `livenet-passkey-signin`.
