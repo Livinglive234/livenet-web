@@ -141,7 +141,7 @@ The email uses Authentik's `email/password_reset.html` template and the email se
 
 ### Locking the easy way around it
 
-Authentik's own `default-password-change` and `default-user-settings-flow` flows change a password, username or email with no current password and no email confirmation, and anyone signed in can open them by typing the address. Import `docs/authentik/livenet-lock-default-flows.yaml` the same way to deny them. Also turn off **Allow users to change email / username / name** in Authentik's admin Settings, so the user-settings flow can't be used either. The email-confirmed recovery flow (`default-recovery-flow`, "Forgot password?") is left alone.
+Authentik's own `default-password-change` and `default-user-settings-flow` flows change a password, username or email with no current password and no email confirmation, and anyone signed in can open them by typing the address. Import `docs/authentik/livenet-lock-default-flows.yaml` the same way to deny them. The same blueprint also blocks Authentik's own passkey setup (`default-authenticator-webauthn-setup`), the social-sign-in enrollment flow (`default-source-enrollment`, so a Google, Discord or GitHub sign-in can't create a new account), the first-run `initial-setup` flow and `default-request`. Also turn off **Allow users to change email / username / name** in Authentik's admin Settings, so the user-settings flow can't be used either. The email-confirmed recovery flow (`default-recovery-flow`, "Forgot password?") is left alone.
 
 ## Changing a name
 

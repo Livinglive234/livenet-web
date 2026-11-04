@@ -1,9 +1,15 @@
-# Blocks Authentik's own flows for changing a password, username or email, so the only way to do
-# those is through the LiveNet flows (which ask for the current password and confirm by email).
-# Import as a blueprint (see docs/signin.md, "Changing a password").
+# Blocks Authentik's own flows that LiveNet replaces or doesn't use, so the only way to do these things
+# is through the LiveNet flows (which ask for the current password and confirm by email):
+#
+#   default-password-change, default-user-settings-flow   change a password, username, email or name
+#   default-authenticator-webauthn-setup                  Authentik's own passkey setup (ours requires a
+#                                                         discoverable credential, so sign-in can offer it)
+#   default-source-enrollment                             creating a new account from a Google, Discord or
+#                                                         GitHub sign-in (accounts are only ever LINKED)
+#   initial-setup, default-request                        first-run admin setup, and access requests
 #
 # Anyone who opens these flows directly (even by typing the address) gets "Access denied". Admins
-# can still set a user's password or email from the Authentik admin interface.
+# can still change a user from the Authentik admin interface. Import as a blueprint (see docs/signin.md).
 version: 1
 metadata:
   name: LiveNet - Lock the default account-change flows
@@ -31,6 +37,65 @@ entries:
     identifiers:
       target: !Find [authentik_flows.flow, [slug, default-user-settings-flow]]
       policy: !KeyOf deny-all
+      order: 0
+    attrs:
+      negate: false
+      enabled: true
+      timeout: 30
+
+  # ---- Flows LiveNet doesn't use or replaces --------------------------------
+  - model: authentik_policies_expression.expressionpolicy
+    id: deny-generic
+    identifiers:
+      name: livenet-deny-unused-flows
+    attrs:
+      expression: |
+        ak_message("This isn't available.")
+        return False
+
+  - model: authentik_policies_expression.expressionpolicy
+    id: deny-social-signup
+    identifiers:
+      name: livenet-deny-social-signup
+    attrs:
+      expression: |
+        ak_message("No LiveNet account is linked to this sign-in. Sign in with your LiveNet username and password, then link it from your account page at livenet.host/account.")
+        return False
+
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !Find [authentik_flows.flow, [slug, default-authenticator-webauthn-setup]]
+      policy: !KeyOf deny-all
+      order: 0
+    attrs:
+      negate: false
+      enabled: true
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !Find [authentik_flows.flow, [slug, default-source-enrollment]]
+      policy: !KeyOf deny-social-signup
+      order: 0
+    attrs:
+      negate: false
+      enabled: true
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !Find [authentik_flows.flow, [slug, initial-setup]]
+      policy: !KeyOf deny-generic
+      order: 0
+    attrs:
+      negate: false
+      enabled: true
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !Find [authentik_flows.flow, [slug, default-request]]
+      policy: !KeyOf deny-generic
       order: 0
     attrs:
       negate: false
