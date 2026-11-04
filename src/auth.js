@@ -39,6 +39,8 @@ const CHANGE_EMAIL = "https://auth.livenet.host/if/flow/livenet-change-email/";
 const SOCIAL_NAMES = { google: "Google", discord: "Discord", github: "GitHub" };
 // Authentik flow for changing the password: asks for the current one, then emails a confirmation link (see docs/authentik/livenet-change-password.yaml).
 const CHANGE_PASSWORD = "https://auth.livenet.host/if/flow/livenet-change-password/";
+// Authentik flow for adding a passkey (see docs/authentik/livenet-passkeys.yaml).
+const ADD_PASSKEY = "https://auth.livenet.host/if/flow/livenet-add-passkey/";
 const MFA_AUTHENTICATOR_SETUP = "https://auth.livenet.host/if/flow/default-authenticator-totp-setup/";
 const MFA_BACKUP_CODES_SETUP = "https://auth.livenet.host/if/flow/default-authenticator-static-setup/";
 
@@ -312,7 +314,7 @@ async function accountPage(env, session, panel = null) {
 <section><div class="wrap"><div class="grid">
 <div class="card"><span class="tag">Name</span><h3>${esc(session.name || session.username)}</h3><p>${esc(session.email)}</p><p class="mt"><a href="${CHANGE_NAME}">Change name</a> · <a href="${CHANGE_EMAIL}">Change email</a></p></div>
 <div class="card"><span class="tag">Username</span><h3>${esc(session.username)}</h3><p>Use this to sign in everywhere on LiveNet.</p><p class="mt"><a href="${CHANGE_USERNAME}">Change username</a></p></div>
-<div class="card"><span class="tag">Security</span><h3>${esc(mfaHeadline(session))}</h3><p><a href="/account/2fa">Two-factor authentication</a></p><p class="mt"><a href="${CHANGE_PASSWORD}">Change password</a></p></div>
+<div class="card"><span class="tag">Security</span><h3>${esc(mfaHeadline(session))}</h3><p><a href="/account/2fa">Two-factor authentication</a></p><p class="mt"><a href="${CHANGE_PASSWORD}">Change password</a> · <a href="${ADD_PASSKEY}">Add a passkey</a></p></div>
 ${socialSources(env).length ? `<div class="card"><span class="tag">Sign-in options</span><h3>Linked accounts</h3><p>Sign in with Google, Discord or GitHub.</p><p class="mt"><a href="/account/connections">Manage linked accounts</a></p></div>` : ""}
 </div>
 <p class="mt btn-row"><a class="btn btn-primary" href="${PANEL_SIGN_IN}">Open the panel</a>

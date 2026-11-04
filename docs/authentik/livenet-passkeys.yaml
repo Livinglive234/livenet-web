@@ -1,0 +1,51 @@
+# Passkey support. Import as a blueprint (see docs/signin.md, "Passkeys").
+#
+#   livenet-add-passkey         a flow a signed-in person opens to add a passkey (the account page links to it).
+#   livenet-passkey-validate    a validation stage that accepts passkeys. Select it in the identification
+#                               stage's "WebAuthn Authenticator Validation Stage" so the sign-in page offers them.
+version: 1
+metadata:
+  name: LiveNet - Passkeys
+entries:
+  - model: authentik_flows.flow
+    id: passkey-flow
+    identifiers:
+      slug: livenet-add-passkey
+    attrs:
+      name: LiveNet add a passkey
+      title: Add a passkey
+      designation: stage_configuration
+      authentication: require_authenticated
+
+  # A passkey must be a "discoverable credential", so the sign-in page can offer it without a username.
+  - model: authentik_stages_authenticator_webauthn.authenticatorwebauthnstage
+    id: passkey-setup
+    identifiers:
+      name: livenet-add-passkey-setup
+    attrs:
+      user_verification: preferred
+      resident_key_requirement: required
+
+  - model: authentik_stages_redirect.redirectstage
+    id: passkey-redirect
+    identifiers:
+      name: livenet-add-passkey-redirect
+    attrs:
+      mode: static
+      target_static: https://livenet.host/account
+      keep_context: false
+
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 10, stage: !KeyOf passkey-setup, target: !KeyOf passkey-flow}
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 20, stage: !KeyOf passkey-redirect, target: !KeyOf passkey-flow}
+
+  - model: authentik_stages_authenticator_validate.authenticatorvalidatestage
+    id: passkey-validate
+    identifiers:
+      name: livenet-passkey-validate
+    attrs:
+      device_classes:
+        - webauthn
+      not_configured_action: skip
+      webauthn_user_verification: preferred

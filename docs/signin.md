@@ -146,3 +146,15 @@ Authentik's own `default-password-change` and `default-user-settings-flow` flows
 ## Changing a name
 
 The Name card on `/account` has a **Change name** link to the `livenet-change-name` flow. Import `docs/authentik/livenet-change-name.yaml` the same way as the other blueprints. Names that look official (staff, admin, livenet and similar words) are refused, except for Authentik superusers, so you can still use any name yourself. To change the reserved words, edit the `reserved` list in the blueprint.
+
+## Passkeys
+
+People add a passkey from the **Add a passkey** link on `/account`, then sign in with it from the username field's autofill on the sign-in page (no username or password needed).
+
+1. Copy `docs/authentik/livenet-passkeys.yaml` into `/opt/authentik/blueprints/`.
+2. In Authentik, open the `default-authentication-flow`'s identification stage and set **WebAuthn Authenticator Validation Stage** to `livenet-passkey-validate`.
+3. Check the sign-in page offers the passkey when you click the username field (the browser has to support it, the person needs a passkey on a device, and it works only on `auth.livenet.host`).
+
+Authentik's default sign-in flow skips the second-factor step after a passkey sign-in, since a passkey is already two factors (the device and a fingerprint, face or PIN). To still ask for a second factor, adjust the expression policy on the MFA stage in that flow.
+
+The passkey is tied to `auth.livenet.host`, so it works for the website and the panel alike (both sign in through Authentik). The panel's own passkey buttons stay hidden.
