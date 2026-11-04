@@ -226,7 +226,7 @@ const page = (email, body) => `<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="dark light">
 <meta name="robots" content="noindex, nofollow"><title>Admin — LiveNet</title>
 <link rel="stylesheet" href="/css/style.css"></head><body>
-<header class="site-header"><div class="wrap"><a class="logo" href="/admin">Live<span>Net</span> admin</a><nav><span>${esc(email)}</span></nav></div></header>
+<header class="site-header"><div class="wrap"><span class="logo"><a href="/">Live<span>Net</span></a> <a href="/admin">admin</a></span><nav><span>${esc(email)}</span></nav></div></header>
 <main><div class="wrap">${body}</div></main></body></html>`;
 
 export async function handleAdmin(request, env) {

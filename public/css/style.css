@@ -90,6 +90,8 @@ a:hover { text-decoration: underline; }
 .logo { font-weight: 800; font-size: 1.125rem; color: var(--text); letter-spacing: -0.02em; }
 .logo span { color: var(--brand); }
 .logo:hover { text-decoration: none; }
+.logo a { color: inherit; }
+.logo a:hover { text-decoration: none; }
 nav { display: flex; align-items: center; gap: 0.5rem 1.25rem; flex-wrap: wrap; }
 nav a { color: var(--muted); font-size: 0.875rem; }
 nav a:hover, nav a[aria-current="page"] { color: var(--text); text-decoration: none; }
