@@ -6,7 +6,7 @@
 #   - refuses a different address when the link carries one (the panel matches accounts by email, so a
 #     different address would not get their servers),
 #   - refuses an address another LiveNet account already uses,
-#   - asks for a username (lowercase, for SFTP) and a password (at least 10 characters),
+#   - asks for a username (lowercase, for SFTP), an optional name and a password (at least 10 characters),
 #   - sends the usual confirmation email, then signs the person in.
 #
 # After importing, bind your Captcha stage to this flow at order 5 (Flows > livenet-invited-signup > Stage
@@ -38,6 +38,28 @@ entries:
         # (The panel looks usernames up in lowercase, so capitals would break SFTP.)
         if not re.fullmatch(r"[a-z0-9][a-z0-9_.-]{1,30}[a-z0-9]", username):
             ak_message("Usernames are 3 to 32 characters: lowercase letters, numbers, dots, dashes and underscores. They must start and end with a letter or number.")
+            return False
+        return True
+
+  - model: authentik_policies_expression.expressionpolicy
+    id: invite-name-policy
+    identifiers:
+      name: livenet-invited-signup-name
+    attrs:
+      expression: |
+        import re
+        name = ((request.context.get("prompt_data") or {}).get("name") or "").strip()
+        if not name:
+            return True
+        if len(name) > 100:
+            ak_message("Your name must be 100 characters or fewer.")
+            return False
+        # Names that look official are refused (people who run LiveNet can change theirs later).
+        reserved = {"admin", "administrator", "staff", "mod", "moderator", "livenet", "support", "owner", "system", "root", "official", "team"}
+        words = set(re.findall(r"[a-z0-9]+", name.lower()))
+        squashed = re.sub(r"[^a-z0-9]", "", name.lower())
+        if words & reserved or squashed in reserved:
+            ak_message("That name looks like an official LiveNet name. Please pick another.")
             return False
         return True
 
@@ -105,6 +127,19 @@ entries:
       placeholder_expression: false
       order: 100
 
+  - model: authentik_stages_prompt.prompt
+    id: invite-name-field
+    identifiers:
+      name: livenet-invited-signup-field-name
+    attrs:
+      field_key: name
+      label: Your name (optional)
+      type: text
+      required: false
+      placeholder: Your name
+      placeholder_expression: false
+      order: 101
+
   # Prefilled from the "?email=" in the invitation link. If it can't be read, the field is simply empty.
   - model: authentik_stages_prompt.prompt
     id: invite-email-field
@@ -117,7 +152,7 @@ entries:
       required: true
       placeholder: you@example.com
       placeholder_expression: false
-      order: 101
+      order: 102
       initial_value: |
         from urllib.parse import parse_qs
         try:
@@ -143,7 +178,7 @@ entries:
       required: true
       placeholder: Password
       placeholder_expression: false
-      order: 102
+      order: 103
 
   - model: authentik_stages_prompt.prompt
     id: invite-password-repeat-field
@@ -156,7 +191,7 @@ entries:
       required: true
       placeholder: Repeat the password
       placeholder_expression: false
-      order: 103
+      order: 104
 
   - model: authentik_stages_prompt.promptstage
     id: invite-prompt
@@ -165,11 +200,13 @@ entries:
     attrs:
       fields:
         - !KeyOf invite-username-field
+        - !KeyOf invite-name-field
         - !KeyOf invite-email-field
         - !KeyOf invite-password-field
         - !KeyOf invite-password-repeat-field
       validation_policies:
         - !KeyOf invite-username-policy
+        - !KeyOf invite-name-policy
         - !KeyOf invite-email-policy
         - !KeyOf invite-password-policy
 
