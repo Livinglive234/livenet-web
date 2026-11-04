@@ -36,6 +36,8 @@ const CHANGE_EMAIL = "https://auth.livenet.host/if/flow/livenet-change-email/";
 // Social sign-in sources that can be linked from the account page. SOCIAL_SOURCES (a variable in
 // wrangler.jsonc) lists the slugs that exist in Authentik; empty hides the section.
 const SOCIAL_NAMES = { google: "Google", discord: "Discord", github: "GitHub" };
+// Authentik's built-in flow for choosing a new password, for any signed-in user.
+const CHANGE_PASSWORD = "https://auth.livenet.host/if/flow/default-password-change/";
 const MFA_AUTHENTICATOR_SETUP = "https://auth.livenet.host/if/flow/default-authenticator-totp-setup/";
 const MFA_BACKUP_CODES_SETUP = "https://auth.livenet.host/if/flow/default-authenticator-static-setup/";
 
@@ -309,7 +311,7 @@ async function accountPage(env, session, panel = null) {
 <section><div class="wrap"><div class="grid">
 <div class="card"><span class="tag">Name</span><h3>${esc(session.name || session.username)}</h3><p>${esc(session.email)}</p><p class="mt"><a href="${CHANGE_EMAIL}">Change email</a></p></div>
 <div class="card"><span class="tag">Username</span><h3>${esc(session.username)}</h3><p>Use this to sign in everywhere on LiveNet.</p><p class="mt"><a href="${CHANGE_USERNAME}">Change username</a></p></div>
-<div class="card"><span class="tag">Security</span><h3>${esc(mfaHeadline(session))}</h3><p><a href="/account/2fa">Two-factor authentication</a></p></div>
+<div class="card"><span class="tag">Security</span><h3>${esc(mfaHeadline(session))}</h3><p><a href="/account/2fa">Two-factor authentication</a></p><p class="mt"><a href="${CHANGE_PASSWORD}">Change password</a></p></div>
 ${socialSources(env).length ? `<div class="card"><span class="tag">Sign-in options</span><h3>Linked accounts</h3><p>Sign in with Google, Discord or GitHub.</p><p class="mt"><a href="/account/connections">Manage linked accounts</a></p></div>` : ""}
 </div>
 <p class="mt btn-row"><a class="btn btn-primary" href="${PANEL_SIGN_IN}">Open the panel</a>
