@@ -2,7 +2,10 @@
 #
 #   livenet-add-passkey         a flow a signed-in person opens to add a passkey (the account page links to it).
 #   livenet-passkey-validate    a validation stage that accepts passkeys. Select it in the identification
-#                               stage's "WebAuthn Authenticator Validation Stage" so the sign-in page offers them.
+#                               stage's "WebAuthn Authenticator Validation Stage" so the sign-in page offers them
+#                               in the username field's autofill.
+#   livenet-passkey-signin      a sign-in flow that uses only a passkey. Select it as the identification stage's
+#                               "Passwordless flow" to put a "Use a security key" link on the sign-in page.
 version: 1
 metadata:
   name: LiveNet - Passkeys
@@ -49,3 +52,32 @@ entries:
         - webauthn
       not_configured_action: skip
       webauthn_user_verification: preferred
+
+  # ---- A sign-in flow that uses only a passkey ---------------------------------
+  - model: authentik_flows.flow
+    id: passkey-signin-flow
+    identifiers:
+      slug: livenet-passkey-signin
+    attrs:
+      name: LiveNet sign in with a passkey
+      title: Sign in with a passkey
+      designation: authentication
+      authentication: require_unauthenticated
+
+  - model: authentik_stages_authenticator_validate.authenticatorvalidatestage
+    id: passkey-signin-validate
+    identifiers:
+      name: livenet-passkey-signin-validate
+    attrs:
+      device_classes:
+        - webauthn
+      not_configured_action: deny
+      webauthn_user_verification: preferred
+
+  - model: authentik_flows.flowstagebinding
+    identifiers: {order: 10, stage: !KeyOf passkey-signin-validate, target: !KeyOf passkey-signin-flow}
+  - model: authentik_flows.flowstagebinding
+    identifiers:
+      order: 100
+      stage: !Find [authentik_stages_user_login.userloginstage, [name, default-authentication-login]]
+      target: !KeyOf passkey-signin-flow

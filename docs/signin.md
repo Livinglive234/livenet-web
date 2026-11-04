@@ -153,7 +153,8 @@ People add (and remove) passkeys on the **Passkeys** page, linked from `/account
 
 1. Copy `docs/authentik/livenet-passkeys.yaml` into `/opt/authentik/blueprints/`.
 2. In Authentik, open the `default-authentication-flow`'s identification stage and set **WebAuthn Authenticator Validation Stage** to `livenet-passkey-validate`.
-3. Check the sign-in page offers the passkey when you click the username field (the browser has to support it, the person needs a passkey on a device, and it works only on `auth.livenet.host`).
+3. For a visible **Use a security key** link under the sign-in form (autofill alone is easy to miss), set the same identification stage's **Passwordless flow** to `livenet-passkey-signin`.
+4. Check the sign-in page offers the passkey when you click the username field (the browser has to support it, the person needs a passkey on a device, and it works only on `auth.livenet.host`).
 
 Authentik's default sign-in flow skips the second-factor step after a passkey sign-in, since a passkey is already two factors (the device and a fingerprint, face or PIN). To still ask for a second factor, adjust the expression policy on the MFA stage in that flow.
 
