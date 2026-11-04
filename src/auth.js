@@ -316,7 +316,6 @@ async function accountPage(env, session, panel = null) {
 ${socialSources(env).length ? `<div class="card"><span class="tag">Sign-in options</span><h3>Linked accounts</h3><p>Sign in with Google, Discord or GitHub.</p><p class="mt"><a href="/account/connections">Manage linked accounts</a></p></div>` : ""}
 </div>
 <p class="mt btn-row"><a class="btn btn-primary" href="${PANEL_SIGN_IN}">Open the panel</a>
-<a class="btn btn-ghost" href="/account/2fa">Two-factor authentication</a>
 <form method="post" action="/auth/logout" class="inline"><button class="btn btn-ghost" type="submit">Sign out</button></form></p>
 </div></section>`;
   return html(shell({ title: "Your account — LiveNet", body }));
