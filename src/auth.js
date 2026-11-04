@@ -149,6 +149,11 @@ async function syncPanel(env, before, after) {
 
 // ---- Linked sign-ins (Google, Discord, GitHub) --------------------------------
 
+const LINK_NOTICES = {
+  unlinked: ["ok", "That sign-in has been unlinked."],
+  "unlink-failed": ["err", "Couldn't unlink that sign-in. Please try again."],
+};
+
 const socialSources = (env) => String(env.SOCIAL_SOURCES ?? "").split(",").map((x) => x.trim().toLowerCase()).filter((x) => SOCIAL_NAMES[x]);
 const authentikBase = (env) => new URL(env.OIDC_ISSUER).origin;
 
@@ -192,9 +197,9 @@ async function unlinkSource(env, session, slug) {
   }
 }
 
-async function socialCard(env, session) {
+async function connectionsPage(env, session, link = null) {
   const slugs = socialSources(env);
-  if (!slugs.length) return "";
+  if (!slugs.length) return new Response("Not found.", { status: 404 });
   const found = await linkedSources(env, session);
   const rows = slugs.map((slug) => {
     const name = SOCIAL_NAMES[slug];
@@ -204,7 +209,12 @@ async function socialCard(env, session) {
     return `<li><strong>${name}</strong> ${found.links ? "not linked" : ""} <a class="btn btn-ghost" href="${authentikBase(env)}/source/oauth/login/${slug}/">Link ${name}</a></li>`;
   }).join("");
   const warning = found.error === "failed" ? `<p class="status err" role="status">Couldn't check which are linked right now.</p>` : "";
-  return `<div class="card"><span class="tag">Sign-in options</span><h3>Linked accounts</h3><p>Link Google, Discord or GitHub to sign in with it. Accounts that aren't linked here can't sign in.</p>${warning}<ul class="plain">${rows}</ul></div>`;
+  const [noticeKind, noticeText] = LINK_NOTICES[link] ?? [];
+  const notice = noticeText ? `<p class="status ${noticeKind}" role="status">${esc(noticeText)}</p>` : "";
+  const body = `<div class="wrap page-title"><p><a class="btn btn-ghost" href="/account">← Back to your account</a></p><h1>Linked accounts</h1><p class="lead">Link Google, Discord or GitHub to sign in with it. A sign-in that isn't linked here can't get into a LiveNet account.</p>${notice}</div>
+<section><div class="wrap"><div class="card">${warning}<ul class="plain">${rows}</ul></div>
+<p class="mt">Just linked something? <a href="/account/connections">Refresh this page</a>.</p></div></section>`;
+  return html(shell({ title: "Linked accounts — LiveNet", body }));
 }
 
 // ---- Back-channel logout ---------------------------------------------------
@@ -292,20 +302,15 @@ const PANEL_NOTICES = {
   failed: ["err", "Saved on your LiveNet account, but updating the panel failed. Your servers are not affected. Please let us know if the panel still shows the old details."],
 };
 
-const LINK_NOTICES = {
-  unlinked: ["ok", "That sign-in has been unlinked."],
-  "unlink-failed": ["err", "Couldn't unlink that sign-in. Please try again."],
-};
-
-async function accountPage(env, session, panel = null, link = null) {
-  const [noticeKind, noticeText] = PANEL_NOTICES[panel] ?? LINK_NOTICES[link] ?? [];
+async function accountPage(env, session, panel = null) {
+  const [noticeKind, noticeText] = PANEL_NOTICES[panel] ?? [];
   const notice = noticeText ? `<p class="status ${noticeKind}" role="status">${esc(noticeText)}</p>` : "";
   const body = `<div class="wrap page-title"><h1>Your account</h1><p class="lead">Signed in with your LiveNet account.</p>${notice}</div>
 <section><div class="wrap"><div class="grid">
 <div class="card"><span class="tag">Name</span><h3>${esc(session.name || session.username)}</h3><p>${esc(session.email)}</p><p class="mt"><a href="${CHANGE_EMAIL}">Change email</a></p></div>
 <div class="card"><span class="tag">Username</span><h3>${esc(session.username)}</h3><p>Use this to sign in everywhere on LiveNet.</p><p class="mt"><a href="${CHANGE_USERNAME}">Change username</a></p></div>
 <div class="card"><span class="tag">Security</span><h3>${esc(mfaHeadline(session))}</h3><p><a href="/account/2fa">Two-factor authentication</a></p></div>
-${await socialCard(env, session)}
+${socialSources(env).length ? `<div class="card"><span class="tag">Sign-in options</span><h3>Linked accounts</h3><p>Sign in with Google, Discord or GitHub.</p><p class="mt"><a href="/account/connections">Manage linked accounts</a></p></div>` : ""}
 </div>
 <p class="mt btn-row"><a class="btn btn-primary" href="${PANEL_SIGN_IN}">Open the panel</a>
 <a class="btn btn-ghost" href="/account/2fa">Two-factor authentication</a>
@@ -557,6 +562,13 @@ export async function handleAuth(request, env) {
     return new Response(null, { status: 302, headers: { Location: `/auth/login?sync=1&next=${encodeURIComponent("/account")}`, "Cache-Control": "no-store" } });
   }
 
+  if (url.pathname === "/account/connections" && request.method === "GET") {
+    const session = await getSession(request, env);
+    if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account/connections", "Cache-Control": "no-store" } });
+    if (dueForRecheck(session)) return recheckRedirect("/account/connections");
+    return connectionsPage(env, session, url.searchParams.get("link"));
+  }
+
   if (url.pathname === "/account/unlink" && request.method === "POST") {
     const session = await getSession(request, env);
     if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account", "Cache-Control": "no-store" } });
@@ -565,14 +577,14 @@ export async function handleAuth(request, env) {
     if (origin && new URL(origin).host !== url.host) return new Response("Forbidden.", { status: 403 });
     const slug = String((await request.formData()).get("source") ?? "").toLowerCase();
     const outcome = socialSources(env).includes(slug) ? await unlinkSource(env, session, slug) : "failed";
-    return new Response(null, { status: 303, headers: { Location: `/account?link=${outcome === "unlinked" ? "unlinked" : "unlink-failed"}`, "Cache-Control": "no-store" } });
+    return new Response(null, { status: 303, headers: { Location: `/account/connections?link=${outcome === "unlinked" ? "unlinked" : "unlink-failed"}`, "Cache-Control": "no-store" } });
   }
 
   if (url.pathname === "/account" && request.method === "GET") {
     const session = await getSession(request, env);
     if (!session) return new Response(null, { status: 302, headers: { Location: "/auth/login?next=/account", "Cache-Control": "no-store" } });
     if (dueForRecheck(session)) return recheckRedirect("/account");
-    return accountPage(env, session, url.searchParams.get("panel"), url.searchParams.get("link"));
+    return accountPage(env, session, url.searchParams.get("panel"));
   }
 
   return new Response("Not found.", { status: 404 });

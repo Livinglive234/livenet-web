@@ -118,7 +118,7 @@ Then edit the `default-authentication-flow` identification stage and add the sou
 After a link, Authentik always redirects to `/if/user/#/settings/sources`, which external users can't open. In the nginx config for `auth.livenet.host`, add this inside the `server` block, before the general `location /`:
 
 ```nginx
-location = /if/user/ { return 302 https://livenet.host/account; }
+location = /if/user/ { return 302 https://livenet.host/account/connections; }
 ```
 
 Admins use `/if/admin/`, which is unaffected. Reload nginx.
