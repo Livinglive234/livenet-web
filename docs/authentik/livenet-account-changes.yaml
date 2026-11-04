@@ -118,16 +118,20 @@ entries:
             return False
         return True
 
-  # Sends the confirmation email to the NEW address instead of the one on the account.
+  # Runs just before the email stage. A flow opened straight from a link has no "pending user", which
+  # the email stage insists on ("Request has been denied"), so set it to the signed-in person. Then
+  # send the confirmation email to the NEW address instead of the one on the account.
   - model: authentik_policies_expression.expressionpolicy
     id: email-override-policy
     identifiers:
       name: livenet-change-email-send-to-new-address
     attrs:
       expression: |
+        plan = request.context["flow_plan"]
+        plan.context["pending_user"] = request.user
         new_email = ((request.context.get("prompt_data") or {}).get("email") or "").strip()
         if new_email:
-            request.context["flow_plan"].context["email"] = new_email
+            plan.context["email"] = new_email
         return True
 
   - model: authentik_stages_prompt.prompt
