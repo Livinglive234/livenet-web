@@ -87,6 +87,12 @@ const safeNext = (value, fallback = "/") => (typeof value === "string" && /^\/(?
 
 // ---- Session ---------------------------------------------------------------
 
+// Only decides whether the header shows an "Admin" link. /admin itself is still locked by Cloudflare Access.
+const isAdmin = (env, session) =>
+  Boolean(session.email) &&
+  String(env.ADMIN_EMAILS ?? "").toLowerCase().split(",").map((e) => e.trim()).filter(Boolean).includes(String(session.email).toLowerCase());
+
+
 // Names of settings that are missing or too short (names only, never values).
 const missingSettings = (env) => [
   ["OIDC_ISSUER", Boolean(env.OIDC_ISSUER)],
@@ -594,7 +600,7 @@ export async function handleAuth(request, env) {
 
   if (url.pathname === "/auth/me" && request.method === "GET") {
     const session = await getSession(request, env);
-    return new Response(JSON.stringify(session ? { name: session.name || session.username, username: session.username } : { signedIn: false }), {
+    return new Response(JSON.stringify(session ? { name: session.name || session.username, username: session.username, admin: isAdmin(env, session) } : { signedIn: false }), {
       status: session ? 200 : 401, headers: { "Content-Type": "application/json", "Cache-Control": "no-store" },
     });
   }
