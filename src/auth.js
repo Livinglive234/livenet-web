@@ -131,7 +131,11 @@ async function syncPanel(env, before, after) {
     const matches = ((await found.json()).data ?? []).filter((u) => String(u.attributes?.email ?? "").toLowerCase() === before.email.toLowerCase());
     if (matches.length !== 1) return "failed";
 
-    const response = await fetch(`${base}/api/application/users/${matches[0].attributes.id}`, { method: "PATCH", headers, body: JSON.stringify(changes) });
+    // The panel validates a full update, so send its current values with the changes applied.
+    const current = matches[0].attributes;
+    const body = { email: current.email, username: current.username, ...changes };
+    for (const field of ["language", "timezone"]) if (current[field]) body[field] = current[field];
+    const response = await fetch(`${base}/api/application/users/${current.id}`, { method: "PATCH", headers, body: JSON.stringify(body) });
     // The panel's API refuses to edit root admins; those are managed by hand.
     if (response.status === 403) return "skipped";
     return response.ok ? "ok" : "failed";
