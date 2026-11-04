@@ -138,3 +138,7 @@ The account page's **Change password** link opens an Authentik flow that asks fo
 2. Check Flows shows `livenet-change-password`.
 
 The email uses Authentik's `email/password_reset.html` template and the email settings that already send the other emails.
+
+### Locking the easy way around it
+
+Authentik's own `default-password-change` and `default-user-settings-flow` flows change a password, username or email with no current password and no email confirmation, and anyone signed in can open them by typing the address. Import `docs/authentik/livenet-lock-default-flows.yaml` the same way to deny them. Also turn off **Allow users to change email / username / name** in Authentik's admin Settings, so the user-settings flow can't be used either. The email-confirmed recovery flow (`default-recovery-flow`, "Forgot password?") is left alone.

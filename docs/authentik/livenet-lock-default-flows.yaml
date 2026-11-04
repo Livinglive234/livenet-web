@@ -1,0 +1,38 @@
+# Blocks Authentik's own flows for changing a password, username or email, so the only way to do
+# those is through the LiveNet flows (which ask for the current password and confirm by email).
+# Import as a blueprint (see docs/signin.md, "Changing a password").
+#
+# Anyone who opens these flows directly (even by typing the address) gets "Access denied". Admins
+# can still set a user's password or email from the Authentik admin interface.
+version: 1
+metadata:
+  name: LiveNet - Lock the default account-change flows
+entries:
+  - model: authentik_policies_expression.expressionpolicy
+    id: deny-all
+    identifiers:
+      name: livenet-deny-default-account-flows
+    attrs:
+      expression: |
+        ak_message("Please change this on your LiveNet account page: livenet.host/account")
+        return False
+
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !Find [authentik_flows.flow, [slug, default-password-change]]
+      policy: !KeyOf deny-all
+      order: 0
+    attrs:
+      negate: false
+      enabled: true
+      timeout: 30
+
+  - model: authentik_policies.policybinding
+    identifiers:
+      target: !Find [authentik_flows.flow, [slug, default-user-settings-flow]]
+      policy: !KeyOf deny-all
+      order: 0
+    attrs:
+      negate: false
+      enabled: true
+      timeout: 30
