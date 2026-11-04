@@ -137,6 +137,8 @@ export async function handleBlog(request, env) {
   }
 
   const body = `<div class="wrap page-title"><span class="badge">${day(post)}</span><h1>${esc(post.title)}</h1></div>
-<section><div class="wrap post">${renderMarkdown(post.body)}<p class="mt"><a href="/blog/">← All posts</a></p></div></section>`;
+<section><div class="wrap post">${renderMarkdown(post.body)}<p class="mt"><a href="/blog/">← All posts</a></p></div></section>
+<section><div class="wrap" id="comments" data-slug="${esc(post.slug)}"><h2>Comments</h2><div id="comment-list"><p>Loading comments…</p></div><div id="comment-form"></div></div></section>
+<script src="/js/comments.js" defer></script>`;
   return html(shell({ title: `${post.title} — LiveNet`, description: post.summary, body, current: "/blog/" }));
 }

@@ -28,6 +28,7 @@ const LINKS = [
 ];
 
 import { POST_PREFIX, esc, getPost, listPosts, slugify, validSlug } from "./blog.js";
+import { COMMENT_PREFIX } from "./comments.js";
 
 const STATUSES = ["pending", "approved", "rejected"];
 
@@ -108,7 +109,8 @@ async function requestsSection(env) {
     const buttons = STATUSES.filter((s) => s !== status)
       .map((s) => `<form method="post" action="/admin/requests" class="inline"><input type="hidden" name="email" value="${esc(e.email)}"><input type="hidden" name="status" value="${s}"><button class="btn btn-ghost small" type="submit">${s}</button></form>`)
       .join("");
-    return `<tr><td>${esc(String(e.submitted).slice(0, 10))}</td><td>${esc(e.name)}<br><a href="mailto:${esc(e.email)}">${esc(e.email)}</a></td><td>${esc(e.use)}</td><td class="reason">${esc(e.reason)}</td><td><span class="pill ${status}">${status}</span></td><td class="actions">${buttons}</td></tr>`;
+    const remove = `<a class="btn btn-ghost small" href="/admin/requests/delete?email=${encodeURIComponent(e.email)}">delete</a>`;
+    return `<tr><td>${esc(String(e.submitted).slice(0, 10))}</td><td>${esc(e.name)}<br><a href="mailto:${esc(e.email)}">${esc(e.email)}</a></td><td>${esc(e.use)}</td><td class="reason">${esc(e.reason)}</td><td><span class="pill ${status}">${status}</span></td><td class="actions">${buttons}${remove}</td></tr>`;
   });
   return `<h2 id="requests">Beta requests</h2><div class="facts">${facts}</div><div class="scroll"><table><thead><tr><th>Date</th><th>Who</th><th>Use</th><th>Reason</th><th>Status</th><th></th></tr></thead><tbody>${rows.join("")}</tbody></table></div>`;
 }
@@ -167,6 +169,25 @@ async function blogSection(env) {
   const rows = posts.map((p) => `<tr><td>${esc(String(p.created).slice(0, 10))}</td><td><a href="/admin/blog/edit?slug=${encodeURIComponent(p.slug)}">${esc(p.title)}</a></td><td><span class="pill ${p.published ? "approved" : "pending"}">${p.published ? "published" : "draft"}</span></td><td>${p.published ? `<a href="/blog/${esc(p.slug)}">view</a>` : ""}</td></tr>`).join("");
   const table = posts.length ? `<div class="scroll"><table><thead><tr><th>Date</th><th>Title</th><th>Status</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : note("No posts yet.");
   return `<h2 id="blog">Blog</h2><p><a class="btn btn-primary small" href="/admin/blog/new">New post</a></p>${table}`;
+}
+
+async function commentsSection(env) {
+  if (!env.BETA_REQUESTS) return `<h2 id="comments">Comments</h2>${note("Not connected yet. Bind the BETA_REQUESTS KV namespace to use comments.")}`;
+  const { keys } = await env.BETA_REQUESTS.list({ prefix: COMMENT_PREFIX, limit: 1000 });
+  const recent = keys.filter((k) => k.metadata).sort((a, b) => String(b.metadata.c).localeCompare(String(a.metadata.c))).slice(0, 50);
+  if (!recent.length) return `<h2 id="comments">Comments</h2>${note("No comments yet.")}`;
+  const rows = recent.map((k) => {
+    const slug = k.name.slice(COMMENT_PREFIX.length).split(":")[0];
+    return `<tr><td>${esc(String(k.metadata.c).slice(0, 10))}</td><td><a href="/blog/${esc(slug)}#comments">${esc(slug)}</a></td><td>${esc(k.metadata.n)}<br>@${esc(k.metadata.u)}</td><td class="reason">${esc(k.metadata.s)}</td><td class="actions"><form method="post" action="/admin/comments/delete" class="inline"><input type="hidden" name="key" value="${esc(k.name)}"><button class="btn btn-ghost small" type="submit">delete</button></form></td></tr>`;
+  }).join("");
+  return `<h2 id="comments">Comments</h2>${note("The latest 50. Comments show up straight away, so remove anything that shouldn't be there.")}<div class="scroll"><table><thead><tr><th>Date</th><th>Post</th><th>Who</th><th>Comment</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`;
+}
+
+function confirmRequestPage(email, entry) {
+  return page(email, `<section><h1>Delete this request?</h1>
+<p>${esc(entry.name)} (${esc(entry.email)}), sent ${esc(String(entry.submitted).slice(0, 10))}.</p><p class="reason">${esc(entry.reason)}</p>
+<p>This removes it for good. If they ask again, a new request will be accepted.</p>
+<form method="post" action="/admin/requests/delete" class="btn-row"><input type="hidden" name="email" value="${esc(entry.email)}"><button class="btn btn-primary" type="submit">Delete request</button><a class="btn btn-ghost" href="/admin#requests">Cancel</a></form></section>`);
 }
 
 function editorPage(email, post, error = "") {
@@ -233,6 +254,18 @@ export async function handleAdmin(request, env) {
       return redirect("/admin#requests");
     }
 
+    if (path === "/admin/requests/delete") {
+      const address = String(form.get("email") ?? "").toLowerCase();
+      if (env.BETA_REQUESTS && address) await env.BETA_REQUESTS.delete(`email:${address}`);
+      return redirect("/admin#requests");
+    }
+
+    if (path === "/admin/comments/delete") {
+      const key = String(form.get("key") ?? "");
+      if (env.BETA_REQUESTS && /^comment:[a-z0-9-]{1,80}:\S{1,60}$/.test(key)) await env.BETA_REQUESTS.delete(key);
+      return redirect("/admin#comments");
+    }
+
     if (path === "/admin/blog" && env.BETA_REQUESTS) {
       const original = clip(form.get("original"), 80);
       const draft = {
@@ -269,9 +302,14 @@ export async function handleAdmin(request, env) {
 
   if (request.method === "GET") {
     if (path === "/admin") {
-      const sections = await Promise.all([requestsSection(env), blogSection(env), trafficSection(env), panelSection(env)]);
+      const sections = await Promise.all([requestsSection(env), blogSection(env), commentsSection(env), trafficSection(env), panelSection(env)]);
       const body = [`<section><h1>Dashboard</h1></section>`, ...sections.map((s) => `<section>${s}</section>`), `<section>${linksSection()}</section>`].join("");
       return html(page(email, body));
+    }
+    if (path === "/admin/requests/delete") {
+      const address = String(url.searchParams.get("email") ?? "").toLowerCase();
+      const entry = env.BETA_REQUESTS && address ? await env.BETA_REQUESTS.get(`email:${address}`, "json") : null;
+      return entry ? html(confirmRequestPage(email, entry)) : redirect("/admin#requests");
     }
     if (path === "/admin/blog/new") return html(editorPage(email, null));
     if (path === "/admin/blog/edit") {

@@ -1,6 +1,7 @@
 import { handleAdmin } from "./admin.js";
 import { getSession, handleAuth } from "./auth.js";
 import { handleBlog } from "./blog.js";
+import { handleComments } from "./comments.js";
 
 // Cloudflare Worker for livenet.host.
 // Handles POST /api/beta. Everything else is served from public/ by Cloudflare.
@@ -111,6 +112,8 @@ export default {
       if (request.method !== "POST") return json({ error: "Method not allowed." }, 405);
       return handleBeta(request, env);
     }
+
+    if (pathname === "/api/comments" || pathname === "/api/comments/delete") return handleComments(request, env);
 
     if (pathname === "/admin" || pathname.startsWith("/admin/")) return handleAdmin(request, env);
 
