@@ -1,5 +1,5 @@
-# LiveNet's own signup flow, for people who were invited (or whose old panel account is being moved over).
-# Import as a blueprint (see docs/signin.md, "Invited signup").
+# LiveNet's own signup flow, used by everyone: the Sign up link, invitations, and old panel accounts being
+# moved over. Import as a blueprint (see docs/signin.md, "Signup").
 #
 # The invitation email links here with "?email=<their address>". This flow:
 #   - prefills the Email field with that address,
@@ -10,19 +10,19 @@
 #     not found in a known data breach),
 #   - sends the usual confirmation email, then signs the person in.
 #
-# After importing, bind your Captcha stage to this flow at order 5 (Flows > livenet-invited-signup > Stage
+# After importing, bind your Captcha stage to this flow at order 5 (Flows > livenet-signup > Stage
 # Bindings), like on the default enrollment flow. The user-write, email and login stages are shared with
 # default-enrollment-flow, so changes to those apply to both.
 version: 1
 metadata:
-  name: LiveNet - Invited signup
+  name: LiveNet - Signup
 entries:
   - model: authentik_flows.flow
     id: invite-flow
     identifiers:
-      slug: livenet-invited-signup
+      slug: livenet-signup
     attrs:
-      name: LiveNet invited signup
+      name: LiveNet signup
       title: Create your LiveNet account
       designation: enrollment
       authentication: none
@@ -30,7 +30,7 @@ entries:
   - model: authentik_policies_expression.expressionpolicy
     id: invite-username-policy
     identifiers:
-      name: livenet-invited-signup-username
+      name: livenet-signup-username
     attrs:
       expression: |
         import re
@@ -45,7 +45,7 @@ entries:
   - model: authentik_policies_expression.expressionpolicy
     id: invite-name-policy
     identifiers:
-      name: livenet-invited-signup-name
+      name: livenet-signup-name
     attrs:
       expression: |
         import re
@@ -67,7 +67,7 @@ entries:
   - model: authentik_policies_expression.expressionpolicy
     id: invite-email-policy
     identifiers:
-      name: livenet-invited-signup-email
+      name: livenet-signup-email
     attrs:
       expression: |
         from urllib.parse import parse_qs
@@ -100,7 +100,7 @@ entries:
   - model: authentik_policies_expression.expressionpolicy
     id: invite-password-policy
     identifiers:
-      name: livenet-invited-signup-password
+      name: livenet-signup-password
     attrs:
       expression: |
         data = request.context.get("prompt_data") or {}
@@ -120,7 +120,7 @@ entries:
   - model: authentik_policies_password.passwordpolicy
     id: invite-breach-policy
     identifiers:
-      name: livenet-invited-signup-breach
+      name: livenet-signup-breach
     attrs:
       password_field: password
       check_static_rules: true
@@ -133,7 +133,7 @@ entries:
   - model: authentik_stages_prompt.prompt
     id: invite-username-field
     identifiers:
-      name: livenet-invited-signup-field-username
+      name: livenet-signup-field-username
     attrs:
       field_key: username
       label: Username
@@ -146,7 +146,7 @@ entries:
   - model: authentik_stages_prompt.prompt
     id: invite-name-field
     identifiers:
-      name: livenet-invited-signup-field-name
+      name: livenet-signup-field-name
     attrs:
       field_key: name
       label: Your name (optional)
@@ -160,7 +160,7 @@ entries:
   - model: authentik_stages_prompt.prompt
     id: invite-email-field
     identifiers:
-      name: livenet-invited-signup-field-email
+      name: livenet-signup-field-email
     attrs:
       field_key: email
       label: Email
@@ -186,7 +186,7 @@ entries:
   - model: authentik_stages_prompt.prompt
     id: invite-password-field
     identifiers:
-      name: livenet-invited-signup-field-password
+      name: livenet-signup-field-password
     attrs:
       field_key: password
       label: Password
@@ -199,7 +199,7 @@ entries:
   - model: authentik_stages_prompt.prompt
     id: invite-password-repeat-field
     identifiers:
-      name: livenet-invited-signup-field-password-repeat
+      name: livenet-signup-field-password-repeat
     attrs:
       field_key: password_repeat
       label: Password (repeat)
@@ -212,7 +212,7 @@ entries:
   - model: authentik_stages_prompt.promptstage
     id: invite-prompt
     identifiers:
-      name: livenet-invited-signup-prompt
+      name: livenet-signup-prompt
     attrs:
       fields:
         - !KeyOf invite-username-field

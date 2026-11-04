@@ -200,14 +200,14 @@ A Cloudflare Turnstile check on the login, "forgot password" and signup pages st
 
 The secret only ever goes into Authentik, never into this repo.
 
-## Invited signup
+## Signup
 
-People invited to a server (and old panel accounts being moved over) get an email whose "Create your LiveNet account" link carries `?email=<their address>`. LiveNet's own signup flow, `livenet-invited-signup`, prefills that address, refuses a different one (the panel matches accounts by email, so another address wouldn't get their servers), refuses an address another account already uses, and then asks for a username, an optional name (with the same block on official-looking names as the Change name flow), a password and the usual email confirmation.
+People invited to a server (and old panel accounts being moved over) get an email whose "Create your LiveNet account" link carries `?email=<their address>`. LiveNet's own signup flow, `livenet-signup`, prefills that address, refuses a different one (the panel matches accounts by email, so another address wouldn't get their servers), refuses an address another account already uses, and then asks for a username, an optional name (with the same block on official-looking names as the Change name flow), a password and the usual email confirmation.
 
-1. Copy `docs/authentik/livenet-invited-signup.yaml` into `/opt/authentik/blueprints/` and check Flows shows `livenet-invited-signup`.
-2. Bind your Captcha stage to it at order 5 (Flows > livenet-invited-signup > Stage Bindings > Bind existing stage), as on `default-enrollment-flow`.
-3. In the panel, go to Admin > Plugins > LiveNet Auth > Settings and set the signup link to `https://auth.livenet.host/if/flow/livenet-invited-signup/`.
-4. Test with `https://auth.livenet.host/if/flow/livenet-invited-signup/?email=you@example.com`: the Email field should already be filled in, and a different address should be refused.
+1. Copy `docs/authentik/livenet-signup.yaml` into `/opt/authentik/blueprints/` and check Flows shows `livenet-signup`.
+2. Bind your Captcha stage to it at order 5 (Flows > livenet-signup > Stage Bindings > Bind existing stage), as on `default-enrollment-flow`.
+3. In the panel, go to Admin > Plugins > LiveNet Auth > Settings and set the signup link to `https://auth.livenet.host/if/flow/livenet-signup/`.
+4. Test with `https://auth.livenet.host/if/flow/livenet-signup/?email=you@example.com`: the Email field should already be filled in, and a different address should be refused.
 
 The flow shares its user-write, email-confirmation and login stages with `default-enrollment-flow`. If the address can't be read from the link (for example after an Authentik update changes how flows remember it), the Email field is simply empty, as it is today, and signup still works.
 
@@ -216,7 +216,7 @@ The flow shares its user-write, email-confirmation and login stages with `defaul
 New passwords (at signup and on the Change password flow) must be at least 10 characters and must not appear in a known data breach. The check uses Have I Been Pwned's free range API: only the first five characters of the password's hash are sent, never the password. If that service can't be reached, Authentik decides how to handle it, so a short outage may let a password through.
 
 To retire the old signup flow:
-1. Set the identification stage's **Enrollment flow** (on `default-authentication-flow`) to `livenet-invited-signup`, so the "Sign up" link goes to the new flow.
+1. Set the identification stage's **Enrollment flow** (on `default-authentication-flow`) to `livenet-signup`, so the "Sign up" link goes to the new flow.
 2. Then copy the updated `livenet-lock-default-flows.yaml` into the blueprints folder. Anyone opening the old `default-enrollment-flow` address (an old email, a bookmark) now sees "This signup link is out of date. Go to auth.livenet.host and choose Sign up there."
 
 The new flow shares stages with the old one, so locking the old flow doesn't affect it.
