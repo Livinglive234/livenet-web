@@ -209,6 +209,47 @@ entries:
       placeholder_expression: false
       order: 104
 
+  - model: authentik_policies_expression.expressionpolicy
+    id: invite-terms-policy
+    identifiers:
+      name: livenet-signup-terms
+    attrs:
+      expression: |
+        data = request.context.get("prompt_data") or {}
+        if data.get("terms") is not True:
+            ak_message("Please confirm you are 13 or older and agree to the Terms and Privacy Policy.")
+            return False
+        return True
+
+  - model: authentik_stages_prompt.prompt
+    id: invite-terms-text
+    identifiers:
+      name: livenet-signup-field-terms-text
+    attrs:
+      field_key: terms_text
+      label: Terms
+      type: static
+      required: false
+      placeholder: >-
+        <a href="https://livenet.host/terms/" target="_blank" rel="noopener">Terms of Service</a> and
+        <a href="https://livenet.host/privacy/" target="_blank" rel="noopener">Privacy Policy</a>.
+        You must be 13 or older to have an account. LiveNet Server Hosting requires you to be 18 or older.
+      placeholder_expression: false
+      order: 105
+
+  - model: authentik_stages_prompt.prompt
+    id: invite-terms-field
+    identifiers:
+      name: livenet-signup-field-terms
+    attrs:
+      field_key: terms
+      label: I am 13 or older and I agree to the Terms and Privacy Policy
+      type: checkbox
+      required: true
+      placeholder: ""
+      placeholder_expression: false
+      order: 106
+
   - model: authentik_stages_prompt.promptstage
     id: invite-prompt
     identifiers:
@@ -220,12 +261,15 @@ entries:
         - !KeyOf invite-email-field
         - !KeyOf invite-password-field
         - !KeyOf invite-password-repeat-field
+        - !KeyOf invite-terms-text
+        - !KeyOf invite-terms-field
       validation_policies:
         - !KeyOf invite-username-policy
         - !KeyOf invite-name-policy
         - !KeyOf invite-email-policy
         - !KeyOf invite-password-policy
         - !KeyOf invite-breach-policy
+        - !KeyOf invite-terms-policy
 
   - model: authentik_flows.flowstagebinding
     identifiers: {order: 10, stage: !KeyOf invite-prompt, target: !KeyOf invite-flow}
