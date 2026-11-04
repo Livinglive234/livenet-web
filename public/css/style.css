@@ -217,3 +217,12 @@ ul.plain li { display: flex; flex-wrap: wrap; gap: 0.5rem 0.75rem; align-items: 
 .comment-body { white-space: pre-wrap; overflow-wrap: anywhere; margin: 0.25rem 0 0; }
 #comment-form { margin-top: 1rem; max-width: 80ch; }
 #comment-form textarea { width: 100%; margin-bottom: 0.75rem; }
+
+/* "Admin" tag next to the account page title: the same gradient text as the home page's name */
+.admin-tag {
+  display: inline-block; vertical-align: middle; margin-left: 0.5rem; padding: 0.125rem 0.75rem;
+  border: 1px solid var(--border); border-radius: var(--r-pill);
+  font-size: 0.875rem; font-weight: 800; letter-spacing: 0.02em; text-transform: uppercase;
+  background: linear-gradient(90deg, var(--brand), var(--accent));
+  -webkit-background-clip: text; background-clip: text; color: transparent;
+}

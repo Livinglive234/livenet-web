@@ -370,7 +370,7 @@ const PANEL_NOTICES = {
 async function accountPage(env, session, panel = null) {
   const [noticeKind, noticeText] = PANEL_NOTICES[panel] ?? [];
   const notice = noticeText ? `<p class="status ${noticeKind}" role="status">${esc(noticeText)}</p>` : "";
-  const body = `<div class="wrap page-title"><h1>Your account</h1><p class="lead">Signed in with your LiveNet account.</p>${notice}</div>
+  const body = `<div class="wrap page-title"><h1>Your account${isAdmin(env, session) ? ' <span class="admin-tag">Admin</span>' : ""}</h1><p class="lead">Signed in with your LiveNet account.</p>${notice}</div>
 <section><div class="wrap"><div class="grid">
 <div class="card"><span class="tag">Name</span><h3>${esc(session.name || session.username)}</h3><p>${esc(session.email)}</p><p class="mt"><a href="${CHANGE_NAME}">Change name</a> · <a href="${CHANGE_EMAIL}">Change email</a></p></div>
 <div class="card"><span class="tag">Username</span><h3>${esc(session.username)}</h3><p>Use this to sign in everywhere on LiveNet.</p><p class="mt"><a href="${CHANGE_USERNAME}">Change username</a></p></div>
